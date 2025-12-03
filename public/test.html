@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Basic Button Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 40px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .test-section {
+      margin-bottom: 30px;
+      padding: 20px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+    }
+    button {
+      background: #3b82f6;
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 5px;
+    }
+    button:hover {
+      background: #2563eb;
+    }
+    button:active {
+      background: #1d4ed8;
+    }
+    .result {
+      margin-top: 15px;
+      padding: 10px;
+      background: #f3f4f6;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+    .error {
+      color: #dc2626;
+      background: #fee2e2;
+    }
+    .success {
+      color: #059669;
+      background: #d1fae5;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔍 Diagnostic Tests</h1>
+  <p>This will help us figure out what's wrong. Try each test:</p>
+
+  <!-- Test 1: Pure JavaScript -->
+  <div class="test-section">
+    <h2>Test 1: Pure JavaScript Button</h2>
+    <button onclick="test1()">Click Me (Pure JS)</button>
+    <div id="test1-result" class="result">Not clicked yet</div>
+  </div>
+
+  <!-- Test 2: JavaScript with counter -->
+  <div class="test-section">
+    <h2>Test 2: Counter Test</h2>
+    <button onclick="incrementCounter()">Increment Counter</button>
+    <div id="counter-result" class="result">Count: 0</div>
+  </div>
+
+  <!-- Test 3: Console test -->
+  <div class="test-section">
+    <h2>Test 3: Console Test</h2>
+    <button onclick="consoleTest()">Check Console</button>
+    <div class="result">Click the button, then press F12 and check the Console tab</div>
+  </div>
+
+  <!-- Instructions -->
+  <div class="test-section" style="background: #dbeafe;">
+    <h2>📋 What to do:</h2>
+    <ol>
+      <li><strong>Save this file</strong> as <code>test.html</code> in your project's <code>public/</code> folder</li>
+      <li><strong>Navigate to:</strong> <code>http://localhost:3000/test.html</code></li>
+      <li><strong>Try clicking</strong> the buttons above</li>
+      <li><strong>Report back:</strong> Which buttons work? Which don't?</li>
+    </ol>
+    
+    <h3 style="margin-top: 20px;">If NONE of these buttons work:</h3>
+    <ul>
+      <li>Your browser JavaScript might be disabled</li>
+      <li>Try a different browser (Chrome, Firefox, Edge)</li>
+      <li>Check if you have browser extensions blocking scripts</li>
+    </ul>
+
+    <h3 style="margin-top: 20px;">If these buttons DO work:</h3>
+    <p>Then the issue is with your Vue/Nuxt setup. Share your:</p>
+    <ul>
+      <li><code>package.json</code> file</li>
+      <li><code>nuxt.config.ts</code> file</li>
+      <li>Any errors in browser console (F12)</li>
+    </ul>
+  </div>
+
+  <script>
+    let counter = 0;
+
+    function test1() {
+      document.getElementById('test1-result').innerHTML = 
+        '<span class="success">✓ Pure JavaScript is working!</span>';
+      console.log('Test 1: Success');
+    }
+
+    function incrementCounter() {
+      counter++;
+      document.getElementById('counter-result').innerHTML = 
+        `<span class="success">Count: ${counter}</span>`;
+      console.log('Counter:', counter);
+    }
+
+    function consoleTest() {
+      console.log('=== CONSOLE TEST ===');
+      console.log('✓ JavaScript is working');
+      console.log('✓ Console logging is working');
+      console.log('Current time:', new Date().toLocaleTimeString());
+      alert('Check the Console tab in DevTools (F12)');
+    }
+
+    // Auto-run on page load
+    window.addEventListener('load', function() {
+      console.log('Page loaded successfully');
+      console.log('If you see this, JavaScript is working');
+    });
+  </script>
+</body>
+</html>

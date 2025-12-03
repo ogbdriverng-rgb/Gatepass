@@ -1,0 +1,43 @@
+{
+  "name": "Gatepass",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "supabase:types": "npx supabase@latest gen types typescript --project-id xhuokenmegqhxlxmhbkh > types/database.types.ts"
+  },
+  "dependencies": {
+    "@headlessui/vue": "^1.7.23",
+    "@nuxtjs/supabase": "^2.0.1",
+    "@nuxtjs/tailwindcss": "^6.14.0",
+    "@pinia/nuxt": "^0.11.3",
+    "@supabase/supabase-js": "^2.86.0",
+    "@vueuse/core": "^14.1.0",
+    "@vueuse/integrations": "^14.1.0",
+    "@vueuse/nuxt": "^14.1.0",
+    "axios": "^1.13.2",
+    "dayjs": "^1.11.19",
+    "echarts": "^6.0.0",
+    "nuxt": "^4.2.1",
+    "pinia": "^3.0.4",
+    "qrcode.vue": "^3.6.0",
+    "vee-validate": "^4.15.1",
+    "vue": "^3.5.25",
+    "vue-echarts": "^8.0.1",
+    "vue-router": "^4.6.3",
+    "vue3-toastify": "^0.2.8",
+    "vuedraggable": "^4.1.0",
+    "yup": "^1.7.1"
+  },
+  "devDependencies": {
+    "@iconify-json/mdi": "^1.2.3",
+    "@nuxtjs/eslint-config-typescript": "^12.1.0",
+    "@types/node": "^24.10.1",
+    "dotenv-cli": "^11.0.0",
+    "unplugin-icons": "^22.5.0"
+  }
+}

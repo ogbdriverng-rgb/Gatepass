@@ -1,0 +1,123 @@
+/* ================================================
+   DARK THEME OVERRIDES
+   Apply when data-theme="dark" is set on root
+   ================================================ */
+
+:root[data-theme="dark"] {
+  /* ============ BACKGROUND COLORS ============ */
+  --bg-primary: var(--color-neutral-900);
+  --bg-secondary: var(--color-neutral-800);
+  --bg-tertiary: var(--color-neutral-700);
+  --bg-overlay: rgba(0, 0, 0, 0.8);
+
+  /* ============ TEXT COLORS ============ */
+  --text-primary: var(--color-neutral-50);
+  --text-secondary: var(--color-neutral-400);
+  --text-tertiary: var(--color-neutral-500);
+  --text-inverted: var(--color-neutral-900);
+
+  /* ============ BORDER COLORS ============ */
+  --border-primary: var(--color-neutral-700);
+  --border-secondary: var(--color-neutral-600);
+  --border-accent: var(--color-primary-400);
+
+  /* ============ INTERACTIVE COLORS ============ */
+  --interactive-primary: var(--color-primary-400);
+  --interactive-primary-hover: var(--color-primary-300);
+  --interactive-primary-active: var(--color-primary-500);
+
+  /* ============ SURFACE COLORS ============ */
+  --surface-light: var(--color-neutral-800);
+  --surface-default: var(--color-neutral-900);
+  --surface-elevated: #0f172a;
+  --surface-overlay: rgba(255, 255, 255, 0.05);
+
+  /* ============ BUTTON COLORS ============ */
+  --btn-primary-bg: var(--color-primary-600);
+  --btn-primary-text: var(--color-neutral-0);
+  --btn-primary-hover-bg: var(--color-primary-500);
+  --btn-primary-active-bg: var(--color-primary-400);
+
+  --btn-secondary-bg: var(--color-neutral-700);
+  --btn-secondary-text: var(--color-neutral-100);
+  --btn-secondary-hover-bg: var(--color-neutral-600);
+  --btn-secondary-active-bg: var(--color-neutral-500);
+
+  --btn-ghost-bg: transparent;
+  --btn-ghost-text: var(--text-primary);
+  --btn-ghost-hover-bg: var(--color-neutral-800);
+
+  /* ============ FORM COLORS ============ */
+  --form-bg: var(--color-neutral-800);
+  --form-border: var(--color-neutral-600);
+  --form-border-focus: var(--color-primary-400);
+  --form-placeholder: var(--color-neutral-500);
+  --form-text: var(--text-primary);
+  --form-error-bg: #7f1d1d;
+
+  --input-disabled-bg: var(--color-neutral-700);
+  --input-disabled-text: var(--color-neutral-500);
+  --input-disabled-border: var(--color-neutral-600);
+
+  /* ============ NAVIGATION COLORS ============ */
+  --nav-bg: var(--color-neutral-800);
+  --nav-text: var(--color-neutral-300);
+  --nav-text-active: var(--color-primary-400);
+  --nav-border: var(--color-neutral-700);
+  --nav-hover-bg: var(--color-neutral-700);
+
+  /* ============ CARD & SURFACE COLORS ============ */
+  --card-bg: var(--color-neutral-800);
+  --card-border: var(--color-neutral-700);
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+
+  --sidebar-bg: var(--color-neutral-800);
+  --sidebar-border: var(--color-neutral-700);
+  --sidebar-text: var(--color-neutral-300);
+  --sidebar-text-hover: var(--color-neutral-100);
+  --sidebar-hover-bg: var(--color-neutral-700);
+
+  /* ============ HEADER COLORS ============ */
+  --header-bg: var(--color-neutral-800);
+  --header-border: var(--color-neutral-700);
+  --header-text: var(--text-primary);
+  --header-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+
+  /* ============ STATUS COLORS (Adjusted for dark mode) ============ */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #f87171;
+  --color-info: #60a5fa;
+
+  /* ============ SHADOWS (More prominent in dark) ============ */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
+}
+
+/* ============ SYSTEM PREFERENCE FALLBACK ============ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    /* Apply dark theme when system prefers dark and no explicit theme set */
+    --bg-primary: var(--color-neutral-900);
+    --bg-secondary: var(--color-neutral-800);
+    --bg-tertiary: var(--color-neutral-700);
+    --text-primary: var(--color-neutral-50);
+    --text-secondary: var(--color-neutral-400);
+    --text-tertiary: var(--color-neutral-500);
+    --border-primary: var(--color-neutral-700);
+    --border-secondary: var(--color-neutral-600);
+    --btn-primary-bg: var(--color-primary-600);
+    --btn-primary-hover-bg: var(--color-primary-500);
+    --btn-secondary-bg: var(--color-neutral-700);
+    --btn-secondary-hover-bg: var(--color-neutral-600);
+    --form-bg: var(--color-neutral-800);
+    --form-border: var(--color-neutral-600);
+    --nav-bg: var(--color-neutral-800);
+    --card-bg: var(--color-neutral-800);
+    --card-border: var(--color-neutral-700);
+    --sidebar-bg: var(--color-neutral-800);
+    --header-bg: var(--color-neutral-800);
+  }
+}

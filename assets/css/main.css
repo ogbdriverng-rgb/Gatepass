@@ -1,0 +1,397 @@
+/* ================================================
+   GATEPASS MAIN CSS ENTRY POINT
+   Imports all theme system and component styles
+   ================================================ */
+
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* ============ THEME SYSTEM ============ */
+@import './themes/variables.css';
+@import './themes/dark-theme.css';
+
+/* ============ BASE STYLES ============ */
+@layer base {
+  :root {
+    color-scheme: light;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    transition-property: background-color, color;
+    transition-duration: var(--transition-base);
+    transition-timing-function: ease-in-out;
+  }
+
+  /* ============ TYPOGRAPHY ============ */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold tracking-tight;
+  }
+
+  h1 {
+    @apply text-3xl md:text-4xl;
+  }
+
+  h2 {
+    @apply text-2xl md:text-3xl;
+  }
+
+  h3 {
+    @apply text-xl md:text-2xl;
+  }
+
+  h4 {
+    @apply text-lg md:text-xl;
+  }
+
+  h5, h6 {
+    @apply text-base md:text-lg;
+  }
+
+  a {
+    color: var(--interactive-primary);
+    transition: color var(--transition-base) ease-in-out;
+
+    &:hover {
+      color: var(--interactive-primary-hover);
+    }
+
+    &:focus-visible {
+      @apply outline-offset-2 outline-2 outline-[var(--interactive-primary)];
+    }
+  }
+
+  /* ============ FORM ELEMENTS ============ */
+  input[type='text'],
+  input[type='email'],
+  input[type='password'],
+  input[type='number'],
+  input[type='tel'],
+  input[type='url'],
+  input[type='search'],
+  textarea,
+  select {
+    background-color: var(--form-bg);
+    border-color: var(--form-border);
+    color: var(--form-text);
+
+    &::placeholder {
+      color: var(--form-placeholder);
+    }
+
+    &:focus {
+      border-color: var(--form-border-focus);
+      outline: none;
+    }
+
+    &:disabled {
+      background-color: var(--input-disabled-bg);
+      border-color: var(--input-disabled-border);
+      color: var(--input-disabled-text);
+      cursor: not-allowed;
+    }
+  }
+
+  textarea {
+    resize: vertical;
+  }
+
+  /* ============ FOCUS STYLES ============ */
+  *:focus-visible {
+    outline: 2px solid var(--form-border-focus);
+    outline-offset: 2px;
+  }
+
+  /* Remove outline for mouse users (but keep for keyboard) */
+  *:focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* ============ SELECTION ============ */
+  ::selection {
+    background-color: var(--interactive-primary);
+    color: var(--text-inverted);
+  }
+
+  ::-moz-selection {
+    background-color: var(--interactive-primary);
+    color: var(--text-inverted);
+  }
+}
+
+/* ============ COMPONENT LAYERS ============ */
+@layer components {
+  /* ============ BUTTON STYLES ============ */
+  .btn {
+    @apply inline-flex items-center justify-center;
+    @apply px-4 py-2 rounded-lg;
+    @apply font-medium text-sm;
+    transition: all var(--transition-base) ease-in-out;
+    @apply focus-visible:outline-offset-2;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+
+    &:active {
+      transform: scale(0.98);
+    }
+  }
+
+  .btn-primary {
+    background-color: var(--btn-primary-bg);
+    color: var(--btn-primary-text);
+
+    &:hover:not(:disabled) {
+      background-color: var(--btn-primary-hover-bg);
+    }
+
+    &:active:not(:disabled) {
+      background-color: var(--btn-primary-active-bg);
+    }
+  }
+
+  .btn-secondary {
+    background-color: var(--btn-secondary-bg);
+    color: var(--btn-secondary-text);
+
+    &:hover:not(:disabled) {
+      background-color: var(--btn-secondary-hover-bg);
+    }
+
+    &:active:not(:disabled) {
+      background-color: var(--btn-secondary-active-bg);
+    }
+  }
+
+  .btn-ghost {
+    background-color: var(--btn-ghost-bg);
+    color: var(--btn-ghost-text);
+
+    &:hover:not(:disabled) {
+      background-color: var(--btn-ghost-hover-bg);
+    }
+  }
+
+  .btn-success {
+    background-color: var(--btn-success-bg);
+    color: var(--btn-success-text);
+
+    &:hover:not(:disabled) {
+      background-color: var(--btn-success-hover-bg);
+    }
+  }
+
+  .btn-error {
+    background-color: var(--btn-error-bg);
+    color: var(--btn-error-text);
+
+    &:hover:not(:disabled) {
+      background-color: var(--btn-error-hover-bg);
+    }
+  }
+
+  /* ============ CARD STYLES ============ */
+  .card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--card-shadow);
+    transition: box-shadow var(--transition-base) ease-in-out;
+
+    &:hover {
+      box-shadow: var(--shadow-md);
+    }
+  }
+
+  /* ============ INPUT STYLES ============ */
+  .input {
+    @apply w-full px-3 py-2 rounded-lg;
+    @apply border-2;
+    transition: border-color var(--transition-base) ease-in-out;
+    background-color: var(--form-bg);
+    border-color: var(--form-border);
+    color: var(--form-text);
+
+    &:focus {
+      border-color: var(--form-border-focus);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    &:disabled {
+      background-color: var(--input-disabled-bg);
+      border-color: var(--input-disabled-border);
+      color: var(--input-disabled-text);
+      cursor: not-allowed;
+    }
+
+    &.error {
+      border-color: var(--color-error);
+      background-color: var(--form-error-bg);
+    }
+  }
+
+  /* ============ LABEL STYLES ============ */
+  .label {
+    @apply block text-sm font-medium;
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-sm);
+  }
+
+  /* ============ BADGE STYLES ============ */
+  .badge {
+    @apply inline-flex items-center justify-center;
+    @apply px-2 py-1 rounded-full;
+    @apply text-xs font-semibold;
+  }
+
+  .badge-primary {
+    background-color: var(--color-primary-100);
+    color: var(--color-primary-800);
+  }
+
+  .badge-secondary {
+    background-color: var(--color-secondary-100);
+    color: var(--color-secondary-800);
+  }
+
+  .badge-success {
+    background-color: #d1fae5;
+    color: #065f46;
+  }
+
+  .badge-error {
+    background-color: #fee2e2;
+    color: #991b1b;
+  }
+
+  /* ============ CONTAINER ============ */
+  .container {
+    @apply mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  /* ============ DIVIDER ============ */
+  .divider {
+    background-color: var(--border-primary);
+    height: 1px;
+  }
+
+  .divider-vertical {
+    background-color: var(--border-primary);
+    width: 1px;
+  }
+}
+
+/* ============ UTILITIES ============ */
+@layer utilities {
+  /* ============ TEXT UTILITIES ============ */
+  .text-primary {
+    color: var(--text-primary);
+  }
+
+  .text-secondary {
+    color: var(--text-secondary);
+  }
+
+  .text-tertiary {
+    color: var(--text-tertiary);
+  }
+
+  .text-inverted {
+    color: var(--text-inverted);
+  }
+
+  /* ============ BACKGROUND UTILITIES ============ */
+  .bg-base {
+    background-color: var(--bg-primary);
+  }
+
+  .bg-secondary {
+    background-color: var(--bg-secondary);
+  }
+
+  .bg-tertiary {
+    background-color: var(--bg-tertiary);
+  }
+
+  /* ============ BORDER UTILITIES ============ */
+  .border-base {
+    border-color: var(--border-primary);
+  }
+
+  .border-secondary {
+    border-color: var(--border-secondary);
+  }
+
+  /* ============ SHADOW UTILITIES ============ */
+  .shadow-sm {
+    box-shadow: var(--shadow-sm);
+  }
+
+  .shadow-md {
+    box-shadow: var(--shadow-md);
+  }
+
+  .shadow-lg {
+    box-shadow: var(--shadow-lg);
+  }
+
+  .shadow-xl {
+    box-shadow: var(--shadow-xl);
+  }
+
+  /* ============ TRANSITION UTILITIES ============ */
+  .transition-fast {
+    transition-duration: var(--transition-fast);
+  }
+
+  .transition-base {
+    transition-duration: var(--transition-base);
+  }
+
+  .transition-slow {
+    transition-duration: var(--transition-slow);
+  }
+
+  /* ============ RADIUS UTILITIES ============ */
+  .rounded-sm {
+    border-radius: var(--radius-sm);
+  }
+
+  .rounded-md {
+    border-radius: var(--radius-md);
+  }
+
+  .rounded-lg {
+    border-radius: var(--radius-lg);
+  }
+
+  .rounded-xl {
+    border-radius: var(--radius-xl);
+  }
+
+  .rounded-2xl {
+    border-radius: var(--radius-2xl);
+  }
+
+  /* ============ SMOOTH TRANSITIONS ============ */
+  .smooth-transition {
+    transition: all var(--transition-base) ease-in-out;
+  }
+
+  .smooth-transition-fast {
+    transition: all var(--transition-fast) ease-in-out;
+  }
+
+  .smooth-transition-slow {
+    transition: all var(--transition-slow) ease-in-out;
+  }
+}
