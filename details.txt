@@ -1,1635 +1,547 @@
+# ✅ PHASE 2 PART 3 - WhatsApp Integration & Response Collection
 
-<!-- ====== 8. DeleteFormDialog.vue ====== -->
-<!-- components/forms/DeleteFormDialog.vue -->
+## 📦 What We Just Created
 
-<template>
-  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <CommonCard class="w-full max-w-sm">
-      <h3 class="text-xl font-bold text-base mb-2">Delete Form?</h3>
-      <p class="text-secondary text-sm mb-6">
-        This action cannot be undone. All form data and responses will be permanently deleted.
-      </p>
+### 9 New Files (Complete WhatsApp Integration)
 
-      <div class="flex gap-3">
-        <CommonButton
-          variant="secondary"
-          label="Cancel"
-          fullWidth
-          @click="$emit('cancel')"
-        />
-        <CommonButton
-          variant="error"
-          label="Delete"
-          fullWidth
-          :disabled="isDeleting"
-          @click="$emit('confirm')"
-        />
-      </div>
-    </CommonCard>
-  </div>
-</template>
+**Composables (1):**
+- ✅ `composables/useResponses.ts` - Response CRUD operations
 
-<script setup lang="ts">
-withDefaults(
-  defineProps<{
-    isDeleting?: boolean
-  }>(),
-  {
-    isDeleting: false,
-  }
-)
+**Stores (1):**
+- ✅ `stores/responses.ts` - Response state management
 
-defineEmits<{
-  confirm: []
-  cancel: []
-}>()
-</script>
+**Server Utilities (1):**
+- ✅ `server/utils/messageProcessor.ts` - Message processing business logic
 
-<template>
-  <div
-    :class="[
-      'p-6 rounded-lg border-2 transition-all cursor-move',
-      isEditing
-        ? 'bg-primary bg-opacity-10 border-primary'
-        : 'bg-card border-base hover:border-primary hover:shadow-md',
-    ]"
-    @click="emit('edit')"
-  >
-    <!-- Field Header -->
-    <div class="flex items-start justify-between mb-4">
-      <div class="flex items-start gap-3 flex-1">
-        <!-- Drag Handle -->
-        <Icon name="mdi:drag-vertical" class="w-5 h-5 text-secondary mt-1 flex-shrink-0" />
+**API Endpoints (5):**
+- ✅ `server/api/webhook/whatsapp.post.ts` - Incoming message webhook
+- ✅ `server/api/webhook/whatsapp.get.ts` - Webhook verification
+- ✅ `server/api/aliases/resolve/[alias].get.ts` - Alias resolver
+- ✅ `server/api/whatsapp/send-message.post.ts` - Send message endpoint
 
-        <!-- Field Info -->
-        <div class="flex-1">
-          <input
-            v-if="isEditing"
-            v-model="fieldLabel"
-            type="text"
-            class="font-semibold text-base bg-transparent border-b-2 border-primary outline-none w-full"
-            @click.stop
-            @blur="updateLabel"
-          />
-          <p v-else class="font-semibold text-base">{{ field.label }}</p>
+**Total: 9 Files** ✅
 
-          <p class="text-xs text-secondary mt-1">
-            {{ getFieldTypeName(field.type) }}
-            <span v-if="field.is_required" class="ml-2 text-error">• Required</span>
-          </p>
-        </div>
-      </div>
+---
 
-      <!-- Delete Button -->
-      <button
-        @click.stop="emit('delete')"
-        class="p-2 text-error hover:bg-error hover:bg-opacity-10 rounded transition-colors"
-      >
-        <Icon name="mdi:trash-2" class="w-4 h-4" />
-      </button>
-    </div>
+## 🎯 What's Implemented
 
-    <!-- Field Preview -->
-    <div v-if="!isEditing" class="ml-8 mb-4">
-      <FieldPreview :field="field" />
-    </div>
+### ✅ useResponses Composable
+```typescript
+// Methods:
+- createResponse(data) // Create new response/session
+- getResponse(responseId) // Fetch response with values
+- listResponses(formId, filters) // List form responses
+- addResponseValue(data) // Save field answer
+- updateResponseStatus(responseId, status) // Mark completed/abandoned
+- getOrCreateSession(formId, phone) // Get existing or create new
+- deleteResponse(responseId) // Delete response
+```
 
-    <!-- Field Settings (When Editing) -->
-    <div v-if="isEditing" class="ml-8 space-y-4">
-      <!-- Field Type -->
-      <div>
-        <label class="text-xs font-medium text-secondary block mb-2">Field Type</label>
-        <p class="text-sm text-base">{{ getFieldTypeName(field.type) }}</p>
-      </div>
+### ✅ useResponseStore (Pinia)
+```typescript
+// State:
+- responses[] // List of responses
+- currentResponse // Active response with values
+- currentFormId // Current form context
+- currentStep // Current field step
+- isLoading, error
 
-      <!-- Placeholder -->
-      <div>
-        <label class="text-xs font-medium text-secondary block mb-1">Placeholder</label>
-        <input
-          v-model="fieldPlaceholder"
-          type="text"
-          class="w-full px-2 py-1 border border-base rounded text-sm bg-secondary bg-opacity-10"
-          @blur="updateField"
-        />
-      </div>
+// Computed:
+- totalResponses
+- completedResponses
+- completionRate
+- averageCompletionTime
+- responsesBySource (WhatsApp, web, api)
 
-      <!-- Required Toggle -->
-      <label class="flex items-center gap-2 cursor-pointer">
-        <input
-          v-model="fieldRequired"
-          type="checkbox"
-          class="w-4 h-4 rounded border-base"
-          @change="updateField"
-        />
-        <span class="text-sm text-base">Required field</span>
-      </label>
+// Methods:
+- loadResponses()
+- loadCurrentResponse()
+- updateResponse()
+- setCurrentStep()
+```
 
-      <!-- Options (for select/multiselect) -->
-      <div v-if="field.type === 'select' || field.type === 'multiselect'">
-        <label class="text-xs font-medium text-secondary block mb-2">Options</label>
-        <div class="space-y-2">
-          <div v-for="(option, index) in fieldOptions" :key="index" class="flex gap-2">
-            <input
-              v-model="option.label"
-              type="text"
-              placeholder="Option label"
-              class="flex-1 px-2 py-1 border border-base rounded text-sm bg-secondary bg-opacity-10"
-              @blur="updateField"
-            />
-            <button
-              @click="removeOption(index)"
-              class="p-1 text-error hover:bg-error hover:bg-opacity-10 rounded"
-            >
-              <Icon name="mdi:close" class="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-        <CommonButton
-          variant="secondary"
-          size="sm"
-          label="Add Option"
-          icon="plus"
-          @click="addOption"
-          class="mt-2 w-full"
-        />
-      </div>
+### ✅ WhatsApp Webhook Handler (`/api/webhook/whatsapp`)
 
-      <!-- Description -->
-      <div>
-        <label class="text-xs font-medium text-secondary block mb-1">Description</label>
-        <textarea
-          v-model="fieldDescription"
-          placeholder="Help text for respondents"
-          class="w-full px-2 py-1 border border-base rounded text-sm bg-secondary bg-opacity-10 resize-none"
-          rows="2"
-          @blur="updateField"
-        />
-      </div>
-    </div>
-  </div>
-</template>
+**POST Handler:**
+- Receives incoming messages from Meta
+- Validates webhook signature
+- Extracts message data
+- Queues to Redis for processing
+- Returns 200 immediately
 
-<script setup lang="ts">
-import { ref } from 'vue'
-import { getFieldType } from '~/utils/fieldTypes'
-import type { FormField } from '~/composables/useForms'
+**GET Handler:**
+- Receives verification request from Meta
+- Validates token
+- Returns challenge
 
-interface Props {
-  field: FormField
-  isEditing: boolean
+**Security:**
+- HMAC-SHA256 signature validation
+- Token verification
+- Error logging to database
+
+### ✅ Message Processor (`server/utils/messageProcessor.ts`)
+
+**Workflow:**
+```
+Incoming Message
+  ├─ Check if "START:form_key"
+  │  ├─ Get published form
+  │  ├─ Find/create session
+  │  └─ Send first question
+  │
+  └─ Check for active session
+     ├─ Get current field
+     ├─ Validate response
+     ├─ Save answer
+     ├─ Check if more fields
+     ├─ Send next question OR complete form
+     └─ Update session state
+```
+
+**Features:**
+- Form start detection
+- Session management (create/resume)
+- Field validation
+- Response value storage
+- Flow progression
+- Form completion
+- WhatsApp message sending
+
+### ✅ Alias Resolver (`/api/aliases/resolve/[alias]`)
+
+- Resolves custom aliases (peter, event2025, etc.)
+- Returns form key
+- Generates WhatsApp link (wa.me/...)
+- Generates web form link
+- Tracks alias clicks
+- Returns 404 if not found
+
+### ✅ Send Message API (`/api/whatsapp/send-message`)
+
+- Authenticated endpoint
+- Send text messages
+- Send template messages
+- Send interactive messages
+- Log all messages
+- Error handling
+
+---
+
+## 🔄 WhatsApp Integration Flow
+
+### User Journey:
+
+```
+1. User receives WhatsApp link
+   ↓
+   URL: https://wa.me/+2348012345678?text=START:abc123
+   
+2. Click opens WhatsApp chat
+   ↓
+   Message: "START:abc123" sent to bot
+   
+3. Webhook receives message
+   ↓
+   POST /api/webhook/whatsapp
+   
+4. Message queued for processing
+   ↓
+   Redis queue: whatsapp:incoming:queue
+   
+5. Processor picks up message
+   ↓
+   Check: Is "START:abc123"?
+   
+6. Create/resume session
+   ↓
+   INSERT form_responses
+   
+7. Send first question
+   ↓
+   POST to Meta API → WhatsApp
+   
+8. User responds
+   ↓
+   Message received again
+   
+9. Validate & save answer
+   ↓
+   INSERT form_response_values
+   
+10. Check if more fields
+    ├─ YES: Send next question (repeat 8-9)
+    └─ NO: Mark completed, send thank you
+```
+
+---
+
+## 📊 Database Tables Used
+
+### New Tables (From Migration):
+```sql
+form_responses
+├─ id, form_id, respondent_phone, respondent_name
+├─ status (in_progress, completed, abandoned)
+├─ source (whatsapp, web, api)
+├─ version, current_step
+├─ session_data (jsonb)
+├─ completion_time_seconds
+└─ created_at, updated_at, completed_at
+
+form_response_values
+├─ id, response_id, field_id
+├─ value (any type)
+└─ created_at, updated_at
+
+whatsapp_messages
+├─ id, session_id
+├─ message_id, direction (inbound/outbound)
+├─ phone, type, content
+├─ status, error_code
+└─ timestamp
+
+whatsapp_sessions
+├─ id, response_id, phone, form_id
+├─ current_step, state
+├─ last_message_at
+├─ is_active, expires_at
+└─ created_at, updated_at
+
+aliases
+├─ alias (PK), form_id, owner_id
+├─ type (whatsapp, web, both)
+├─ is_active, clicks
+└─ created_at
+```
+
+---
+
+## 🛠️ Setup Required
+
+### 1. Environment Variables
+
+```env
+# WhatsApp API
+WHATSAPP_API_URL=https://graph.instagram.com/v15.0
+WHATSAPP_BUSINESS_ACCOUNT_ID=xxx
+WHATSAPP_PHONE_NUMBER_ID=xxx
+WHATSAPP_API_TOKEN=xxx
+WHATSAPP_WEBHOOK_TOKEN=your-webhook-token
+WHATSAPP_WEBHOOK_SECRET=your-webhook-secret
+WHATSAPP_BOT_PHONE_NUMBER=+2348012345678
+
+# Redis (for message queue)
+REDIS_URL=redis://localhost:6379
+```
+
+### 2. Meta Webhook Configuration
+
+In Meta Business Dashboard:
+1. Go to WhatsApp > Configuration
+2. Set webhook URL: `https://yourdomain.com/api/webhook/whatsapp`
+3. Set verify token: `your-webhook-token`
+4. Subscribe to messages event
+
+### 3. Database
+
+Run migration (already included):
+- All tables created
+- Indexes set up
+- RLS policies configured
+
+---
+
+## 📞 WhatsApp Message Flow
+
+### Send Message (Bot → User)
+
+```javascript
+// Text message
+POST /api/whatsapp/send-message
+{
+  "to": "2348012345678",
+  "type": "text",
+  "text": "What is your name?"
 }
 
-const props = defineProps<Props>()
-
-const emit = defineEmits<{
-  edit: []
-  delete: []
-  update: [updates: Partial<FormField>]
-}>()
-
-/* ============ STATE ============ */
-const fieldLabel = ref(props.field.label)
-const fieldPlaceholder = ref(props.field.placeholder || '')
-const fieldRequired = ref(props.field.is_required)
-const fieldDescription = ref(props.field.meta.description || '')
-const fieldOptions = ref(
-  JSON.parse(JSON.stringify(props.field.meta.options || []))
-)
-
-/* ============ COMPUTED ============ */
-const getFieldTypeName = (type: string): string => {
-  const fieldType = getFieldType(type)
-  return fieldType?.name || type
-}
-
-/* ============ METHODS ============ */
-const updateLabel = () => {
-  updateField()
-}
-
-const updateField = () => {
-  emit('update', {
-    label: fieldLabel.value,
-    placeholder: fieldPlaceholder.value,
-    is_required: fieldRequired.value,
-    meta: {
-      ...props.field.meta,
-      description: fieldDescription.value,
-      options: fieldOptions.value,
-    },
-  })
-}
-
-const addOption = () => {
-  fieldOptions.value.push({
-    id: `opt_${Date.now()}`,
-    label: '',
-  })
-}
-
-const removeOption = (index: number) => {
-  fieldOptions.value.splice(index, 1)
-  updateField()
-}
-</script>
-
-<template>
-  <div class="p-4">
-    <!-- Header -->
-    <div class="mb-6">
-      <h3 class="font-semibold text-base mb-2">Fields</h3>
-      <p class="text-xs text-secondary">Drag fields to add them to your form</p>
-    </div>
-
-    <!-- Search -->
-    <input
-      v-model="search"
-      type="text"
-      placeholder="Search fields..."
-      class="w-full px-3 py-2 border border-base rounded-lg text-sm bg-secondary bg-opacity-10 mb-4"
-    />
-
-    <!-- Categories -->
-    <div class="space-y-4">
-      <div v-for="category in filteredCategories" :key="category.id">
-        <!-- Category Header -->
-        <button
-          @click="toggleCategory(category.id)"
-          class="w-full flex items-center justify-between px-3 py-2 hover:bg-secondary hover:bg-opacity-10 rounded-lg transition-colors"
-        >
-          <div class="flex items-center gap-2">
-            <Icon :name="`mdi:${category.icon}`" class="w-4 h-4" />
-            <span class="text-sm font-medium text-base">{{ category.label }}</span>
-          </div>
-          <Icon
-            :name="expandedCategories.includes(category.id) ? 'mdi:chevron-up' : 'mdi:chevron-down'"
-            class="w-4 h-4 text-secondary"
-          />
-        </button>
-
-        <!-- Category Fields -->
-        <div
-          v-if="expandedCategories.includes(category.id)"
-          class="ml-2 space-y-2 mt-2"
-        >
-          <div
-            v-for="field in getCategoryFields(category.id)"
-            :key="field.id"
-            draggable="true"
-            @dragstart="startDrag(field)"
-            class="p-3 bg-secondary bg-opacity-10 rounded-lg cursor-move hover:bg-opacity-20 transition-colors border border-border-primary"
-          >
-            <div class="flex items-start gap-2">
-              <Icon :name="`mdi:${field.icon}`" class="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-              <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium text-base">{{ field.name }}</p>
-                <p class="text-xs text-secondary">{{ field.description }}</p>
-              </div>
-            </div>
-
-            <!-- Quick Add Button -->
-            <button
-              @click="addField(field.id)"
-              class="w-full mt-2 px-2 py-1 text-xs bg-primary text-white rounded hover:bg-primary-700 transition-colors"
-            >
-              Add
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Tips -->
-    <div class="mt-8 p-3 bg-info bg-opacity-10 rounded-lg">
-      <p class="text-xs font-medium text-info mb-1">💡 Tip:</p>
-      <p class="text-xs text-secondary">
-        You can drag fields directly into your form or use the "Add" button
-      </p>
-    </div>
-  </div>
-</template>
-
-<script setup lang="ts">
-import { ref, computed } from 'vue'
-import { FIELD_CATEGORIES, getFieldsByCategory } from '~/utils/fieldTypes'
-import type { FieldTypeConfig } from '~/utils/fieldTypes'
-
-/* ============ STATE ============ */
-const search = ref('')
-const expandedCategories = ref<string[]>(['input', 'selection'])
-const draggedField = ref<FieldTypeConfig | null>(null)
-
-/* ============ EMITS ============ */
-const emit = defineEmits<{
-  'add-field': [fieldType: string]
-}>()
-
-/* ============ COMPUTED ============ */
-const categories = computed(() => FIELD_CATEGORIES)
-
-const filteredCategories = computed(() => {
-  if (!search.value) return categories.value
-  return categories.value.filter(cat =>
-    getFieldsByCategory(cat.id).some(field =>
-      field.name.toLowerCase().includes(search.value.toLowerCase()) ||
-      field.description.toLowerCase().includes(search.value.toLowerCase())
-    )
-  )
-})
-
-/* ============ METHODS ============ */
-const getCategoryFields = (categoryId: string): FieldTypeConfig[] => {
-  let fields = getFieldsByCategory(categoryId)
-
-  if (search.value) {
-    const searchLower = search.value.toLowerCase()
-    fields = fields.filter(field =>
-      field.name.toLowerCase().includes(searchLower) ||
-      field.description.toLowerCase().includes(searchLower)
-    )
-  }
-
-  return fields
-}
-
-const toggleCategory = (categoryId: string) => {
-  const index = expandedCategories.value.indexOf(categoryId)
-  if (index > -1) {
-    expandedCategories.value.splice(index, 1)
-  } else {
-    expandedCategories.value.push(categoryId)
-  }
-}
-
-const startDrag = (field: FieldTypeConfig) => {
-  draggedField.value = field
-}
-
-const addField = (fieldType: string) => {
-  emit('add-field', fieldType)
-}
-</script>
-
-
-<!-- ====== 7. FieldPreview.vue ====== -->
-<!-- components/forms/FieldPreview.vue -->
-
-<template>
-  <div class="space-y-2">
-    <!-- Text Input -->
-    <template v-if="['text', 'email', 'phone', 'url', 'number'].includes(field.type)">
-      <label class="text-sm text-secondary">{{ field.label }}</label>
-      <input
-        type="text"
-        :placeholder="field.placeholder || 'Answer...'"
-        disabled
-        class="w-full px-3 py-2 border border-base rounded-lg bg-secondary bg-opacity-10 text-sm"
-      />
-    </template>
-
-    <!-- Textarea -->
-    <template v-else-if="field.type === 'textarea'">
-      <label class="text-sm text-secondary">{{ field.label }}</label>
-      <textarea
-        :placeholder="field.placeholder || 'Answer...'"
-        disabled
-        class="w-full px-3 py-2 border border-base rounded-lg bg-secondary bg-opacity-10 text-sm resize-none"
-        rows="3"
-      />
-    </template>
-
-    <!-- Date -->
-    <template v-else-if="field.type === 'date'">
-      <label class="text-sm text-secondary">{{ field.label }}</label>
-      <input
-        type="date"
-        disabled
-        class="w-full px-3 py-2 border border-base rounded-lg bg-secondary bg-opacity-10 text-sm"
-      />
-    </template>
-
-    <!-- Select -->
-    <template v-else-if="field.type === 'select'">
-      <label class="text-sm text-secondary">{{ field.label }}</label>
-      <select disabled class="w-full px-3 py-2 border border-base rounded-lg bg-secondary bg-opacity-10 text-sm">
-        <option>Choose an option...</option>
-        <option v-for="option in field.meta.options" :key="option.id">
-          {{ option.label }}
-        </option>
-      </select>
-    </template>
-
-    <!-- Multiselect (as checkboxes) -->
-    <template v-else-if="field.type === 'multiselect'">
-      <label class="text-sm text-secondary">{{ field.label }}</label>
-      <div class="space-y-2">
-        <label v-for="option in field.meta.options" :key="option.id" class="flex items-center gap-2">
-          <input type="checkbox" disabled class="w-4 h-4 rounded border-base" />
-          <span class="text-sm">{{ option.label }}</span>
-        </label>
-      </div>
-    </template>
-
-    <!-- Rating -->
-    <template v-else-if="field.type === 'rating'">
-      <label class="text-sm text-secondary">{{ field.label }}</label>
-      <div class="flex gap-1">
-        <button
-          v-for="i in field.meta.scale || 5"
-          :key="i"
-          disabled
-          class="px-3 py-1 border border-base rounded bg-secondary bg-opacity-10 text-sm"
-        >
-          {{ i }}
-        </button>
-      </div>
-    </template>
-
-    <!-- File Upload -->
-    <template v-else-if="field.type === 'file'">
-      <label class="text-sm text-secondary">{{ field.label }}</label>
-      <div class="px-4 py-6 border-2 border-dashed border-base rounded-lg text-center">
-        <Icon name="mdi:upload" class="w-6 h-6 mx-auto text-secondary mb-2" />
-        <p class="text-sm text-secondary">Click to upload</p>
-      </div>
-    </template>
-
-    <!-- Required Indicator -->
-    <div v-if="field.is_required" class="text-xs text-error">
-      * Required
-    </div>
-
-    <!-- Description -->
-    <div v-if="field.meta.description" class="text-xs text-secondary italic">
-      {{ field.meta.description }}
-    </div>
-  </div>
-</template>
-
-<script setup lang="ts">
-import type { FormField } from '~/composables/useForms'
-
-interface Props {
-  field: FormField
-}
-
-withDefaults(defineProps<Props>(), {})
-</script>
-
-
-
-<template>
-  <div class="flex h-screen bg-base">
-    <!-- Left Panel: Field Palette -->
-    <div class="w-72 bg-card border-r border-base overflow-y-auto">
-      <FieldPalette @add-field="handleAddField" />
-    </div>
-
-    <!-- Center Panel: Form Canvas -->
-    <div class="flex-1 overflow-y-auto p-8">
-      <div class="max-w-2xl mx-auto">
-        <!-- Form Header -->
-        <div class="mb-8">
-          <input
-            v-model="formTitle"
-            type="text"
-            placeholder="Untitled Form"
-            class="text-4xl font-bold bg-transparent text-base outline-none mb-2 w-full"
-            @blur="updateFormTitle"
-          />
-          <textarea
-            v-model="formDescription"
-            placeholder="Add a description..."
-            class="w-full bg-secondary bg-opacity-10 rounded-lg p-3 text-secondary text-sm resize-none outline-none border border-base"
-            rows="3"
-            @blur="updateFormDescription"
-          />
-        </div>
-
-        <!-- Form Fields -->
-        <div class="space-y-4">
-          <draggable
-            v-model="fields"
-            item-key="id"
-            class="space-y-4"
-            @end="handleReorderFields"
-          >
-            <template #item="{ element: field }">
-              <DraggableField
-                :field="field"
-                :is-editing="editingFieldId === field.id"
-                @edit="editingFieldId = field.id"
-                @delete="handleDeleteField(field.id)"
-                @update="handleUpdateField(field.id, $event)"
-              />
-            </template>
-          </draggable>
-
-          <!-- Add Field Button -->
-          <div v-if="fields.length === 0" class="text-center py-8">
-            <Icon name="mdi:plus" class="w-12 h-12 mx-auto text-secondary opacity-50 mb-4" />
-            <p class="text-secondary">Add your first field from the palette</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Right Panel: Field Inspector/Preview -->
-    <div class="w-80 bg-card border-l border-base overflow-y-auto flex flex-col">
-      <!-- Form Actions -->
-      <div class="p-4 border-b border-base">
-        <CommonButton
-          variant="primary"
-          label="Preview"
-          icon="eye"
-          fullWidth
-          @click="togglePreview"
-          class="mb-2"
-        />
-        <CommonButton
-          v-if="!isPublished"
-          variant="secondary"
-          label="Publish"
-          fullWidth
-          @click="handlePublish"
-        />
-        <CommonButton
-          v-else
-          variant="secondary"
-          label="Unpublish"
-          fullWidth
-          @click="handleUnpublish"
-        />
-      </div>
-
-      <!-- Field Inspector -->
-      <div v-if="editingFieldId && selectedField" class="flex-1 p-4">
-        <FieldInspector :field="selectedField" @update="handleUpdateField(selectedField.id, $event)" />
-      </div>
-
-      <!-- Form Settings -->
-      <div v-else class="flex-1 p-4">
-        <h3 class="font-semibold text-base mb-4">Form Settings</h3>
-
-        <div class="space-y-4">
-          <!-- Allow Edit -->
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input
-              v-model="formConfig.allow_edit"
-              type="checkbox"
-              class="w-4 h-4 rounded border-base"
-            />
-            <span class="text-sm text-secondary">Allow respondents to edit responses</span>
-          </label>
-
-          <!-- Edit Window -->
-          <div>
-            <label class="text-sm font-medium text-base block mb-2">Edit window (days)</label>
-            <input
-              v-model.number="formConfig.expiry_days"
-              type="number"
-              placeholder="Leave empty for unlimited"
-              class="w-full px-3 py-2 border border-base rounded-lg text-sm"
-            />
-          </div>
-
-          <!-- Status Badge -->
-          <div class="mt-6 p-3 bg-secondary bg-opacity-10 rounded-lg">
-            <p class="text-xs font-medium text-secondary mb-2">Status:</p>
-            <div class="flex gap-2">
-              <span
-                v-if="isPublished"
-                class="px-2 py-1 bg-success bg-opacity-10 text-success text-xs rounded"
-              >
-                Published
-              </span>
-              <span v-else class="px-2 py-1 bg-warning bg-opacity-10 text-warning text-xs rounded">
-                Draft
-              </span>
-            </div>
-          </div>
-
-          <!-- Form Key -->
-          <div class="mt-4 p-3 bg-secondary bg-opacity-10 rounded-lg">
-            <p class="text-xs font-medium text-secondary mb-1">Form Key:</p>
-            <p class="text-xs font-mono text-base break-all">{{ formKey }}</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Preview Modal -->
-    <FormPreview v-if="showPreview" :form="currentForm" @close="showPreview = false" />
-  </div>
-</template>
-
-<script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import draggable from 'vuedraggable'
-import type { FormWithFields, FormField } from '~/composables/useForms'
-
-const route = useRoute()
-const router = useRouter()
-const formStore = useFormStore()
-const { getForm, updateForm, addField, updateField, deleteField, reorderFields, publishForm, unpublishForm } = useForms()
-
-/* ============ STATE ============ */
-const formTitle = ref('')
-const formDescription = ref('')
-const formKey = ref('')
-const isPublished = ref(false)
-const fields = ref<FormField[]>([])
-const editingFieldId = ref<string | null>(null)
-const showPreview = ref(false)
-const isLoading = ref(false)
-
-const formConfig = ref({
-  allow_edit: true,
-  expiry_days: null as number | null,
-})
-
-/* ============ COMPUTED ============ */
-const currentForm = computed<FormWithFields | null>(() => {
-  if (!formStore.currentForm) return null
-  return {
-    ...formStore.currentForm,
-    fields: fields.value,
-  }
-})
-
-const selectedField = computed(() => {
-  return fields.value.find(f => f.id === editingFieldId.value)
-})
-
-/* ============ LOAD FORM ============ */
-const loadForm = async () => {
-  isLoading.value = true
-  const formKeyParam = route.params.form_key as string
-
-  try {
-    const result = await getForm(formKeyParam)
-
-    if (!result.success || !result.form) {
-      await router.push('/dashboard/forms')
-      return
-    }
-
-    const form = result.form
-    await formStore.loadCurrentForm(form.id)
-
-    formTitle.value = form.title
-    formDescription.value = form.description || ''
-    formKey.value = form.form_key
-    isPublished.value = form.is_published
-    fields.value = form.fields
-    formConfig.value = {
-      allow_edit: form.config.allow_edit,
-      expiry_days: form.config.expiry_days,
-    }
-  } catch (error) {
-    console.error('Error loading form:', error)
-  } finally {
-    isLoading.value = false
-  }
-}
-
-/* ============ HANDLERS ============ */
-const handleAddField = async (fieldType: string) => {
-  if (!currentForm.value) return
-
-  const newField: Omit<FormField, 'id'> = {
-    field_key: `field_${Date.now()}`,
-    type: fieldType as any,
-    label: `Question ${fields.value.length + 1}`,
-    placeholder: '',
-    is_required: false,
-    order_idx: fields.value.length,
-    meta: {
-      options: [],
-      validations: {},
-      conditional_logic: [],
-    },
-  }
-
-  const result = await addField(currentForm.value.id, newField)
-
-  if (result.success && result.field) {
-    fields.value.push(result.field)
-    editingFieldId.value = result.field.id
-  }
-}
-
-const handleUpdateField = async (fieldId: string, updates: Partial<FormField>) => {
-  const result = await updateField(fieldId, updates)
-
-  if (result.success && result.field) {
-    const index = fields.value.findIndex(f => f.id === fieldId)
-    if (index !== -1) {
-      fields.value[index] = result.field
+// Interactive buttons (max 3)
+{
+  "to": "2348012345678",
+  "type": "interactive",
+  "interactive": {
+    "type": "button",
+    "body": { "text": "Select gender" },
+    "action": {
+      "buttons": [
+        { "type": "reply", "reply": { "id": "m", "title": "Male" } },
+        { "type": "reply", "reply": { "id": "f", "title": "Female" } }
+      ]
     }
   }
 }
 
-const handleDeleteField = async (fieldId: string) => {
-  const result = await deleteField(fieldId)
-
-  if (result.success) {
-    fields.value = fields.value.filter(f => f.id !== fieldId)
-    editingFieldId.value = null
+// List message (for many options)
+{
+  "to": "2348012345678",
+  "type": "interactive",
+  "interactive": {
+    "type": "list",
+    "body": { "text": "Choose department" },
+    "action": {
+      "button": "Select",
+      "sections": [
+        {
+          "title": "Departments",
+          "rows": [
+            { "id": "d1", "title": "HR" },
+            { "id": "d2", "title": "Finance" }
+          ]
+        }
+      ]
+    }
   }
 }
+```
 
-const handleReorderFields = async () => {
-  if (!currentForm.value) return
+### Receive Message (User → Bot)
 
-  const fieldIds = fields.value.map(f => f.id)
-  await reorderFields(currentForm.value.id, fieldIds)
+```json
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "changes": [
+        {
+          "value": {
+            "messages": [
+              {
+                "from": "2348012345678",
+                "id": "wamid.xxx",
+                "timestamp": "1234567890",
+                "type": "text",
+                "text": { "body": "John Doe" }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
 }
+```
+
+---
 
-const handlePublish = async () => {
-  if (!currentForm.value) return
-
-  const result = await publishForm(currentForm.value.id)
-
-  if (result.success) {
-    isPublished.value = true
-    formStore.updateFormInList(result.form as any)
-  }
-}
-
-const handleUnpublish = async () => {
-  if (!currentForm.value) return
-
-  const result = await unpublishForm(currentForm.value.id)
-
-  if (result.success) {
-    isPublished.value = false
-    formStore.updateFormInList({
-      ...currentForm.value,
-      is_published: false,
-      status: 'draft',
-    })
-  }
-}
-
-const updateFormTitle = async () => {
-  if (!currentForm.value) return
-  await updateForm(currentForm.value.id, { title: formTitle.value })
-}
-
-const updateFormDescription = async () => {
-  if (!currentForm.value) return
-  await updateForm(currentForm.value.id, { description: formDescription.value })
-}
-
-const togglePreview = () => {
-  showPreview.value = !showPreview.value
-}
-
-/* ============ LIFECYCLE ============ */
-onMounted(() => {
-  loadForm()
-})
-</script>
-
-
-<!-- ====== 5. FormEditorHeader.vue ====== -->
-<!-- components/forms/FormEditorHeader.vue -->
-
-<template>
-  <div class="sticky top-0 z-40 bg-card border-b border-base">
-    <div class="p-4 flex items-center justify-between">
-      <!-- Form Title & Status -->
-      <div class="flex-1">
-        <h1 class="text-2xl font-bold text-base">{{ form.title }}</h1>
-        <p class="text-sm text-secondary mt-1">
-          {{ form.is_published ? '✓ Published' : '📋 Draft' }}
-        </p>
-      </div>
-
-      <!-- Action Buttons -->
-      <div class="flex gap-3">
-        <CommonButton
-          variant="secondary"
-          icon="eye"
-          label="Preview"
-          @click="$emit('preview')"
-        />
-        <CommonButton
-          v-if="!form.is_published"
-          variant="primary"
-          icon="upload"
-          label="Publish"
-          @click="$emit('publish')"
-        />
-        <CommonButton
-          v-else
-          variant="secondary"
-          icon="download"
-          label="Unpublish"
-          @click="$emit('unpublish')"
-        />
-      </div>
-    </div>
-  </div>
-</template>
-
-<script setup lang="ts">
-import type { GatpassForm } from '~/composables/useForms'
-
-withDefaults(
-  defineProps<{
-    form: GatpassForm
-  }>(),
-  {}
-)
-
-defineEmits<{
-  preview: []
-  publish: []
-  unpublish: []
-}>()
-</script>
-
-
-<!-- ====== 2. FormKeyField.vue ====== -->
-<!-- components/forms/FormKeyField.vue -->
-
-<template>
-  <div>
-    <p class="text-sm font-medium text-base mb-2">Form Key</p>
-    <div class="flex gap-2">
-      <input
-        :value="formKey"
-        type="text"
-        readonly
-        class="flex-1 px-3 py-2 border border-base rounded-lg text-sm bg-secondary bg-opacity-10 font-mono text-xs"
-      />
-      <button
-        @click="$emit('copy')"
-        class="p-2 hover:bg-secondary rounded-lg transition-colors"
-        title="Copy form key"
-      >
-        <Icon name="mdi:content-copy" class="w-5 h-5" />
-      </button>
-    </div>
-  </div>
-</template>
-
-<script setup lang="ts">
-withDefaults(
-  defineProps<{
-    formKey: string
-  }>(),
-  {}
-)
-
-defineEmits<{
-  copy: []
-}>()
-</script>
-
-
-
-<!-- ====== 6. FormPreview.vue ====== -->
-<!-- components/forms/FormPreview.vue -->
-
-<template>
-  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-    <CommonCard class="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-      <!-- Header -->
-      <div class="flex items-center justify-between mb-6 pb-4 border-b border-base sticky top-0 bg-card">
-        <h2 class="text-2xl font-bold text-base">Form Preview</h2>
-        <button
-          @click="emit('close')"
-          class="p-2 hover:bg-secondary rounded-lg transition-colors"
-        >
-          <Icon name="mdi:close" class="w-6 h-6" />
-        </button>
-      </div>
-
-      <!-- Preview Content -->
-      <div class="space-y-6">
-        <!-- Form Title -->
-        <div>
-          <h1 class="text-3xl font-bold text-base">{{ form.title }}</h1>
-          <p v-if="form.description" class="text-secondary mt-2">{{ form.description }}</p>
-        </div>
-
-        <!-- Fields -->
-        <div class="space-y-4">
-          <div v-if="form.fields.length === 0" class="text-center py-8">
-            <Icon name="mdi:inbox" class="w-12 h-12 mx-auto text-secondary opacity-50 mb-3" />
-            <p class="text-secondary">No fields added yet</p>
-          </div>
-
-          <div
-            v-for="(field, index) in form.fields"
-            :key="field.id"
-            class="space-y-2"
-          >
-            <!-- Field Number -->
-            <div class="flex items-center gap-2 mb-3">
-              <div class="w-8 h-8 rounded-full bg-primary bg-opacity-10 flex items-center justify-center">
-                <span class="text-sm font-semibold text-primary">{{ index + 1 }}</span>
-              </div>
-              <h3 class="font-semibold text-base">
-                {{ field.label }}
-                <span v-if="field.is_required" class="text-error ml-1">*</span>
-              </h3>
-            </div>
-
-            <!-- Field Preview -->
-            <div class="ml-10">
-              <FieldPreview :field="field" />
-            </div>
-
-            <!-- Divider -->
-            <div v-if="index < form.fields.length - 1" class="h-px bg-border-primary my-6" />
-          </div>
-        </div>
-
-        <!-- Submit Button -->
-        <div class="mt-8 pt-6 border-t border-base">
-          <CommonButton variant="primary" label="Submit" fullWidth disabled />
-          <p class="text-xs text-secondary text-center mt-2">
-            This is a preview. The form will function in the actual web and WhatsApp interfaces.
-          </p>
-        </div>
-      </div>
-
-      <!-- Tab: WhatsApp Preview -->
-      <div v-if="showWhatsAppPreview" class="mt-8 pt-6 border-t border-base">
-        <h3 class="font-semibold text-base mb-4">WhatsApp Preview</h3>
-        <WhatsAppSimulator :form="form" />
-      </div>
-
-      <!-- Preview Toggle -->
-      <div class="mt-6 pt-6 border-t border-base">
-        <button
-          @click="showWhatsAppPreview = !showWhatsAppPreview"
-          class="text-sm text-primary hover:text-primary-700 font-medium flex items-center gap-2"
-        >
-          <Icon :name="showWhatsAppPreview ? 'mdi:chevron-up' : 'mdi:chevron-down'" class="w-4 h-4" />
-          {{ showWhatsAppPreview ? 'Hide' : 'Show' }} WhatsApp Preview
-        </button>
-      </div>
-    </CommonCard>
-  </div>
-</template>
-
-<script setup lang="ts">
-import { ref } from 'vue'
-import type { FormWithFields } from '~/composables/useForms'
-
-interface Props {
-  form: FormWithFields
-}
-
-withDefaults(defineProps<Props>(), {})
-
-const emit = defineEmits<{
-  close: []
-}>()
-
-const showWhatsAppPreview = ref(false)
-</script>
-
-<!-- ====== 1. FormSettingsSidebar.vue ====== -->
-<!-- components/forms/FormSettingsSidebar.vue -->
-
-<template>
-  <div>
-    <!-- Header -->
-    <div class="p-4 border-b border-base">
-      <h3 class="font-semibold text-base">Form Settings</h3>
-    </div>
-
-    <!-- Content -->
-    <div class="flex-1 p-4 space-y-4 overflow-y-auto">
-      <!-- Form Title -->
-      <div>
-        <label class="text-sm font-medium text-base block mb-2">Title</label>
-        <input
-          :value="form.title"
-          type="text"
-          class="w-full px-3 py-2 border border-base rounded-lg text-sm bg-secondary bg-opacity-10 outline-none focus:border-primary"
-          @blur="handleUpdateField('title', $event)"
-        />
-      </div>
-
-      <!-- Form Description -->
-      <div>
-        <label class="text-sm font-medium text-base block mb-2">Description</label>
-        <textarea
-          :value="form.description"
-          class="w-full px-3 py-2 border border-base rounded-lg text-sm bg-secondary bg-opacity-10 outline-none focus:border-primary resize-none"
-          rows="3"
-          @blur="handleUpdateField('description', $event)"
-        />
-      </div>
-
-      <div class="h-px bg-border-primary" />
-
-      <!-- Allow Edit Toggle -->
-      <label class="flex items-center gap-2 cursor-pointer">
-        <input
-          :checked="form.config?.allow_edit"
-          type="checkbox"
-          class="w-4 h-4 rounded border-base"
-          @change="handleUpdateConfig"
-        />
-        <span class="text-sm text-secondary">Allow respondents to edit responses</span>
-      </label>
-
-      <!-- Edit Window (Days) -->
-      <div>
-        <label class="text-sm font-medium text-base block mb-2">Edit window (days)</label>
-        <input
-          :value="form.config?.expiry_days || ''"
-          type="number"
-          placeholder="Leave empty for unlimited"
-          class="w-full px-3 py-2 border border-base rounded-lg text-sm bg-secondary bg-opacity-10 outline-none focus:border-primary"
-          @blur="handleUpdateExpiry"
-        />
-      </div>
-
-      <div class="h-px bg-border-primary" />
-
-      <!-- Form Key -->
-      <FormKeyField :form-key="form.form_key" @copy="$emit('copy-key')" />
-
-      <!-- Web URL -->
-      <FormUrlField :form-key="form.form_key" :base-url="baseUrl" @copy="$emit('copy-url')" />
-
-      <!-- Responses Count -->
-      <ResponsesCard :count="form.total_responses" />
-
-      <!-- Danger Zone -->
-      <div class="h-px bg-border-primary" />
-
-      <button
-        @click="$emit('delete')"
-        class="w-full px-3 py-2 text-sm text-error hover:bg-error hover:bg-opacity-10 rounded-lg transition-colors border border-error"
-      >
-        Delete Form
-      </button>
-    </div>
-  </div>
-</template>
-
-<script setup lang="ts">
-import type { GatpassForm } from '~/composables/useForms'
-import FormKeyField from '~/components/forms/FormKeyField.vue'
-import FormUrlField from '~/components/forms/FormUrlField.vue'
-import ResponsesCard from '~/components/forms/ResponsesCard.vue'
-
-const props = defineProps<{
-  form: GatpassForm
-  baseUrl: string
-}>()
-
-const emit = defineEmits<{
-  'update-field': [field: string, value: string]
-  'update-config': [config: any]
-  'update-expiry': [days: number | null]
-  delete: []
-  'copy-key': []
-  'copy-url': []
-}>()
-
-const handleUpdateField = (field: string, event: Event) => {
-  const target = event.target as HTMLInputElement | HTMLTextAreaElement
-  emit('update-field', field, target.value)
-}
-
-const handleUpdateConfig = (event: Event) => {
-  const target = event.target as HTMLInputElement
-  emit('update-config', {
-    ...props.form.config,
-    allow_edit: target.checked,
-  })
-}
-
-const handleUpdateExpiry = (event: Event) => {
-  const target = event.target as HTMLInputElement
-  const days = target.value ? parseInt(target.value) : null
-  emit('update-expiry', days)
-}
-</script>
-
-
-<!-- ====== 3. FormUrlField.vue ====== -->
-<!-- components/forms/FormUrlField.vue -->
-
-<template>
-  <div>
-    <p class="text-sm font-medium text-base mb-2">Web Form URL</p>
-    <div class="flex gap-2">
-      <input
-        :value="`${baseUrl}/f/${formKey}`"
-        type="text"
-        readonly
-        class="flex-1 px-3 py-2 border border-base rounded-lg text-sm bg-secondary bg-opacity-10 font-mono text-xs"
-      />
-      <button
-        @click="$emit('copy')"
-        class="p-2 hover:bg-secondary rounded-lg transition-colors"
-        title="Copy form URL"
-      >
-        <Icon name="mdi:link" class="w-5 h-5" />
-      </button>
-    </div>
-  </div>
-</template>
-
-<script setup lang="ts">
-withDefaults(
-  defineProps<{
-    formKey: string
-    baseUrl: string
-  }>(),
-  {}
-)
-
-defineEmits<{
-  copy: []
-}>()
-</script>
-
-
-
-<!-- ====== 4. ResponsesCard.vue ====== -->
-<!-- components/forms/ResponsesCard.vue -->
-
-<template>
-  <div class="p-3 bg-secondary bg-opacity-10 rounded-lg">
-    <p class="text-xs text-secondary mb-1">Responses</p>
-    <p class="text-2xl font-bold text-primary">
-      {{ count || 0 }}
-    </p>
-  </div>
-</template>
-
-<script setup lang="ts">
-withDefaults(
-  defineProps<{
-    count?: number
-  }>(),
-  {
-    count: 0,
-  }
-)
-</script>
-
-
-<template>
-  <div class="max-w-sm mx-auto">
-    <!-- Phone Frame -->
-    <div class="bg-black rounded-3xl p-2 shadow-2xl">
-      <div class="bg-secondary rounded-2xl overflow-hidden shadow-lg">
-        <!-- Status Bar -->
-        <div class="bg-secondary text-white px-4 py-2 flex items-center justify-between text-xs">
-          <span>9:41</span>
-          <div class="flex gap-1 text-lg">
-            <span>📶</span>
-            <span>📡</span>
-            <span>🔋</span>
-          </div>
-        </div>
-
-        <!-- Chat Header -->
-        <div class="bg-secondary-700 text-white px-4 py-3 flex items-center gap-3">
-          <div class="w-8 h-8 rounded-full bg-secondary-500 flex items-center justify-center text-sm">
-            💬
-          </div>
-          <div class="flex-1">
-            <p class="font-semibold text-sm">{{ form.title }}</p>
-            <p class="text-xs opacity-75">Active now</p>
-          </div>
-        </div>
-
-        <!-- Messages Container -->
-        <div class="h-96 overflow-y-auto bg-secondary-50 p-4 space-y-2 flex flex-col">
-          <!-- Welcome Message -->
-          <div class="flex justify-start">
-            <div class="bg-white rounded-lg rounded-tl-none px-3 py-2 max-w-xs shadow-sm">
-              <p class="text-sm text-secondary-900">
-                👋 {{ form.title }}
-              </p>
-              <p v-if="form.description" class="text-xs text-secondary-600 mt-1">
-                {{ form.description }}
-              </p>
-            </div>
-          </div>
-
-          <!-- Current Field -->
-          <div class="flex justify-start mt-4">
-            <div class="bg-white rounded-lg rounded-tl-none px-3 py-2 max-w-xs shadow-sm">
-              <p class="text-sm text-secondary-900 font-semibold mb-2">
-                {{ currentField.label }}
-              </p>
-
-              <!-- Quick Reply Buttons (for select) -->
-              <div v-if="currentField.type === 'select'" class="space-y-2">
-                <button
-                  v-for="option in currentField.meta.options"
-                  :key="option.id"
-                  @click="selectOption(option.id)"
-                  class="w-full px-3 py-2 bg-secondary bg-opacity-20 text-secondary-900 text-sm rounded border border-secondary text-left hover:bg-opacity-30 transition-colors"
-                >
-                  {{ option.label }}
-                </button>
-              </div>
-
-              <!-- Multiselect Checkboxes -->
-              <div v-else-if="currentField.type === 'multiselect'" class="space-y-2">
-                <label
-                  v-for="option in currentField.meta.options"
-                  :key="option.id"
-                  class="flex items-center gap-2 cursor-pointer hover:bg-secondary hover:bg-opacity-10 p-1 rounded"
-                >
-                  <input
-                    type="checkbox"
-                    class="w-4 h-4 rounded border-secondary"
-                    @change="selectMultiple(option.id)"
-                  />
-                  <span class="text-sm text-secondary-900">{{ option.label }}</span>
-                </label>
-              </div>
-
-              <!-- Text Input -->
-              <div v-else-if="['text', 'email', 'phone', 'number'].includes(currentField.type)" class="text-sm text-secondary-600 italic">
-                {{ getInputPlaceholder(currentField.type) }}
-              </div>
-
-              <!-- Date Input -->
-              <div v-else-if="currentField.type === 'date'" class="text-sm text-secondary-600 italic">
-                📅 Select a date
-              </div>
-
-              <!-- File Upload -->
-              <div v-else-if="currentField.type === 'file'" class="text-sm text-secondary-600 italic">
-                📎 Send a file or photo
-              </div>
-
-              <!-- Rating -->
-              <div v-else-if="currentField.type === 'rating'" class="flex gap-1">
-                <button
-                  v-for="i in currentField.meta.scale || 5"
-                  :key="i"
-                  @click="selectRating(i)"
-                  class="px-2 py-1 bg-secondary bg-opacity-20 text-secondary-900 text-xs rounded hover:bg-opacity-30 transition-colors"
-                >
-                  {{ i }} ⭐
-                </button>
-              </div>
-
-              <!-- Textarea -->
-              <div v-else-if="currentField.type === 'textarea'" class="text-sm text-secondary-600 italic">
-                ✏️ Send your message
-              </div>
-            </div>
-          </div>
-
-          <!-- Navigation Buttons -->
-          <div v-if="form.fields.length > 1" class="flex justify-end gap-2 mt-4">
-            <button
-              v-if="currentIndex > 0"
-              @click="previousField"
-              class="px-3 py-1 bg-secondary bg-opacity-20 text-secondary-900 text-xs rounded"
-            >
-              ← Back
-            </button>
-            <button
-              v-if="currentIndex < form.fields.length - 1"
-              @click="nextField"
-              class="px-3 py-1 bg-secondary text-white text-xs rounded"
-            >
-              Next →
-            </button>
-            <button
-              v-else
-              @click="submitForm"
-              class="px-3 py-1 bg-success text-white text-xs rounded"
-            >
-              ✓ Done
-            </button>
-          </div>
-
-          <div class="flex-1" />
-
-          <!-- Timestamp -->
-          <div class="text-center text-xs text-secondary-500 mt-4">
-            {{ currentTime }}
-          </div>
-        </div>
-
-        <!-- Input Area -->
-        <div class="bg-secondary-100 px-3 py-2 border-t border-secondary-200">
-          <div class="flex items-center gap-2">
-            <span class="text-xl cursor-pointer">😊</span>
-            <input
-              type="text"
-              placeholder="Type a message..."
-              class="flex-1 bg-white rounded-full px-4 py-1 text-sm outline-none"
-              disabled
-            />
-            <span class="text-xl cursor-pointer">✈️</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Info -->
-    <p class="text-xs text-secondary text-center mt-4">
-      This is a simulation of how your form will appear in WhatsApp
-    </p>
-  </div>
-</template>
-
-<script setup lang="ts">
-import { ref, computed } from 'vue'
-import type { FormWithFields } from '~/composables/useForms'
-
-interface Props {
-  form: FormWithFields
-}
-
-const props = defineProps<Props>()
-
-/* ============ STATE ============ */
-const currentIndex = ref(0)
-const selectedResponses = ref<Record<string, any>>({})
-
-/* ============ COMPUTED ============ */
-const currentField = computed(() => {
-  return props.form.fields[currentIndex.value]
-})
-
-const currentTime = computed(() => {
-  return new Date().toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  })
-})
-
-/* ============ METHODS ============ */
-const selectOption = (optionId: string) => {
-  selectedResponses.value[currentField.value.id] = optionId
-  nextField()
-}
-
-const selectMultiple = (optionId: string) => {
-  const current = selectedResponses.value[currentField.value.id] || []
-  const index = current.indexOf(optionId)
-
-  if (index > -1) {
-    current.splice(index, 1)
-  } else {
-    current.push(optionId)
-  }
-
-  selectedResponses.value[currentField.value.id] = current
-}
-
-const selectRating = (rating: number) => {
-  selectedResponses.value[currentField.value.id] = rating
-  nextField()
-}
-
-const nextField = () => {
-  if (currentIndex.value < props.form.fields.length - 1) {
-    currentIndex.value++
-  }
-}
-
-const previousField = () => {
-  if (currentIndex.value > 0) {
-    currentIndex.value--
-  }
-}
-
-const submitForm = () => {
-  currentIndex.value = 0
-  selectedResponses.value = {}
-}
-
-const getInputPlaceholder = (type: string): string => {
-  const placeholders: Record<string, string> = {
-    text: '✏️ Type your answer',
-    email: '📧 Enter your email',
-    phone: '📱 Enter your phone number',
-    number: '🔢 Enter a number',
-  }
-  return placeholders[type] || '✏️ Type your answer'
-}
-</script>
-
-components/forms/TextInput.vue
-<template>
-  <div class="w-full">
-    <!-- Label -->
-    <label v-if="label" :for="inputId" class="label block text-sm font-semibold text-base mb-2">
-      {{ label }}
-      <span v-if="required" class="text-error ml-1">*</span>
-    </label>
-
-    <!-- Input wrapper -->
-    <div class="relative">
-      <!-- Icon placeholder (Left side) -->
-      <div
-        v-if="icon"
-        class="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-secondary pointer-events-none flex items-center justify-center"
-      >
-        <!-- Email Icon -->
-        <svg v-if="icon === 'email'" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
-        </svg>
-
-        <!-- Lock Icon -->
-        <svg v-else-if="icon === 'lock'" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M18 8h-1V6c0-2.76-2.24-5-5-5s-5 2.24-5 5v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
-        </svg>
-
-        <!-- Phone Icon -->
-        <svg v-else-if="icon === 'phone'" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M17.92 7.02C17.45 6.18 16.64 5.55 15.70 5.25c-2.25-.75-5.17-.75-7.42 0-.94.3-1.75.93-2.22 1.77C4.97 9.26 4.98 13.75 7.06 15.98c.47.84 1.28 1.47 2.22 1.77 1.21.4 2.5.59 3.84.59 1.34 0 2.63-.19 3.84-.59.94-.3 1.75-.93 2.22-1.77 2.08-2.23 2.09-6.72.01-8.96zM12 15.4c-1.88 0-3.4-1.52-3.4-3.4s1.52-3.4 3.4-3.4 3.4 1.52 3.4 3.4-1.52 3.4-3.4 3.4z"/>
-        </svg>
-
-        <!-- User Icon -->
-        <svg v-else-if="icon === 'user'" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-        </svg>
-      </div>
-
-      <!-- Input -->
-      <input
-        :id="inputId"
-        v-model="model"
-        :type="computedType"
-        :placeholder="placeholder"
-        :name="inputName"
-        :disabled="disabled"
-        :required="required"
-        :autocomplete="getAutocomplete()"
-        class="input w-full"
-        :class="{
-          'pl-10': icon,
-          'pr-10': type === 'password',
-          'border-red-500': error,
-        }"
-        @blur="emit('blur')"
-        @focus="emit('focus')"
-      />
-
-      <!-- Show/Hide Password Toggle (Right side) -->
-      <button
-        v-if="type === 'password'"
-        type="button"
-        @click="showPassword = !showPassword"
-        class="absolute right-3 top-1/2 transform -translate-y-1/2 text-secondary hover:text-base transition-colors"
-        :title="showPassword ? 'Hide password' : 'Show password'"
-      >
-        <!-- Eye Open Icon -->
-        <svg v-if="showPassword" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
-        </svg>
-
-        <!-- Eye Off Icon -->
-        <svg v-else class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M11.83 9L15.23 12.4c.15-.35.25-.74.25-1.15 0-2.01-1.63-3.63-3.63-3.63-.41 0-.8.1-1.15.25l3.15 3.15zM7.08 8.54L5.77 7.23c-1.56 1.56-2.56 3.71-2.56 6.14 0 4.97 4.05 9 9 9 2.43 0 4.58-1 6.14-2.56l-1.31-1.31c-1.16.92-2.62 1.47-4.22 1.47-3.79 0-6.88-3.08-6.88-6.88 0-1.6.55-3.06 1.47-4.22zM19.07 4.93L4.93 19.07c3.91 3.13 8.23 3.13 12.14 0 3.91-3.13 3.91-8.22 0-12.14zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
-        </svg>
-      </button>
-    </div>
-
-    <!-- Error / Helper text -->
-    <p v-if="error" class="mt-1 text-sm text-error">{{ error }}</p>
-    <p v-else-if="helperText" class="mt-1 text-sm text-secondary">{{ helperText }}</p>
-  </div>
-</template>
-
-<script setup lang="ts">
-import { computed, ref } from 'vue'
-
-export interface Props {
-  modelValue: string
-  type?: 'text' | 'email' | 'password' | 'number' | 'tel' | 'url' | 'search'
-  label?: string
-  placeholder?: string
-  id?: string
-  name?: string
-  icon?: string
-  error?: string
-  helperText?: string
-  disabled?: boolean
-  required?: boolean
-  className?: string
-}
-
-const props = withDefaults(defineProps<Props>(), {
-  type: 'text',
-  disabled: false,
-  required: false,
-})
-
-const emit = defineEmits<{
-  'update:modelValue': [value: string]
-  blur: []
-  focus: []
-}>()
-
-const showPassword = ref(false)
-
-const inputId = computed(() =>
-  props.id || `input-${props.label?.toLowerCase().replace(/\s+/g, '-')}`
-)
-
-const inputName = computed(() =>
-  props.name || props.label?.toLowerCase().replace(/\s+/g, '_') || props.type
-)
-
-const model = computed({
-  get: () => props.modelValue,
-  set: (val) => emit('update:modelValue', val),
-})
-
-const computedType = computed(() => {
-  if (props.type === 'password' && showPassword.value) {
-    return 'text'
-  }
-  return props.type
-})
-
-const getAutocomplete = () => {
-  switch (props.type) {
-    case 'email':
-      return 'email'
-    case 'password':
-      return 'current-password'
-    case 'tel':
-      return 'tel'
-    case 'url':
-      return 'url'
-    case 'search':
-      return 'off'
-    default:
-      return 'on'
-  }
-}
-</script>
-
-<style scoped>
-input.input {
-  width: 100%;
-  padding: 0.625rem 0.75rem;
-  border-radius: var(--radius-lg);
-  border: 2px solid var(--form-border);
-  background-color: var(--form-bg);
-  color: var(--form-text);
-  font-size: 1rem;
-  line-height: 1.5rem;
-  transition: all var(--transition-base) ease-in-out;
-}
-
-input.input.pl-10 {
-  padding-left: 2.5rem;
-}
-
-input.input.pr-10 {
-  padding-right: 2.5rem;
-}
-
-input.input::placeholder {
-  color: var(--form-placeholder);
-}
-
-input.input:focus {
-  border-color: var(--form-border-focus);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-  outline: none;
-}
-
-input.input:disabled {
-  background-color: var(--input-disabled-bg);
-  border-color: var(--input-disabled-border);
-  color: var(--input-disabled-text);
-  cursor: not-allowed;
-}
-
-input.input.error {
-  border-color: var(--color-error);
-  background-color: var(--form-error-bg);
-}
-
-input.input.error:focus {
-  border-color: var(--color-error);
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
-}
-
-.label {
-  color: var(--form-label);
-}
-</style>
+## 🔐 Security Features
+
+✅ **Webhook Signature Validation**
+- HMAC-SHA256 verification
+- Prevents man-in-the-middle attacks
+
+✅ **Token Verification**
+- Verify token check on all requests
+- Validates Meta requests
+
+✅ **Database Logging**
+- All messages logged for audit trail
+- Error tracking
+
+✅ **Session Management**
+- Phone number based sessions
+- In-progress status tracking
+- Auto-expiry after 24 hours
+
+✅ **Authentication**
+- Protected endpoints require JWT
+- RLS policies on data
+
+---
+
+## 📊 Analytics Available
+
+From `useResponseStore`:
+
+```typescript
+// Basic stats
+totalResponses // Total responses collected
+completedResponses // Completed forms
+completionRate // % completed
+
+// Timing
+averageCompletionTime // Avg seconds to complete
+
+// Source breakdown
+responsesBySource // { whatsapp: 50, web: 30, api: 20 }
+
+// Per-form stats
+responses.filter(r => r.form_id === formId)
+  .filter(r => r.status === 'completed').length
+```
+
+---
+
+## 🚀 Testing Phase 2 Part 3
+
+### Manual Testing Steps
+
+1. **Setup WhatsApp Business Account**
+   - [ ] Create Meta account
+   - [ ] Create WhatsApp Business App
+   - [ ] Get API credentials
+   - [ ] Configure webhook
+
+2. **Test Webhook Verification**
+   ```bash
+   # Meta will send GET request
+   GET /api/webhook/whatsapp?hub_mode=subscribe&hub_challenge=1234567&hub_verify_token=your-token
+   # Should return: 1234567
+   ```
+
+3. **Test Message Flow**
+   - [ ] Send "START:abc123" from WhatsApp
+   - [ ] Bot receives in webhook
+   - [ ] Session created in database
+   - [ ] First question sent
+   - [ ] Response saved
+   - [ ] Next question sent
+   - [ ] Form marked completed
+
+4. **Test Response Collection**
+   - [ ] Complete full form from WhatsApp
+   - [ ] Check form_responses table
+   - [ ] Check form_response_values
+   - [ ] Verify all data saved
+
+5. **Test Alias Resolver**
+   ```bash
+   GET /api/aliases/resolve/peter
+   # Returns:
+   {
+     "form_key": "abc123",
+     "whatsapp_link": "https://wa.me/...",
+     "web_url": "https://gatepass.ng/f/abc123"
+   }
+   ```
+
+---
+
+## 🔗 Integration Points
+
+### With Phase 1 (Auth)
+- User authenticated to create forms
+- Uses useAuthStore for ownership
+
+### With Phase 2 Part 1 (Form Builder)
+- Form published with flow_json
+- Fields ordered and stored
+- Form key generated
+
+### With Phase 2 Part 2 (Pages)
+- Pages list forms
+- Edit page uses builder
+- Responses visible in dashboard
+
+---
+
+## 📈 What's Happening Behind the Scenes
+
+```
+Database Level:
+├─ form_responses: tracks session state
+├─ form_response_values: stores each answer
+├─ whatsapp_messages: audit log
+├─ aliases: custom URLs
+└─ whatsapp_sessions: active conversations
+
+Business Logic:
+├─ Form initiation (START:key)
+├─ Field progression
+├─ Validation
+├─ Session persistence
+└─ Completion tracking
+
+Integration:
+├─ Meta webhook API
+├─ Redis queue
+├─ Message processor
+└─ Database storage
+```
+
+---
+
+## 🎯 Complete Phase 2 Flow
+
+```
+Phase 2 Part 1: Form Builder ✅
+  └─ Create forms with fields
+  └─ Publish form (compile flow)
+
+Phase 2 Part 2: Pages & Preview ✅
+  └─ List forms
+  └─ Edit forms
+  └─ Preview before publish
+
+Phase 2 Part 3: WhatsApp Integration ✅
+  └─ Webhook receives messages
+  └─ Create sessions
+  └─ Progress through form
+  └─ Collect responses
+  └─ Complete submission
+```
+
+---
+
+## ✨ Phase 2 Complete!
+
+You now have:
+- ✅ Full form builder
+- ✅ WhatsApp webhook integration
+- ✅ Response collection
+- ✅ Session management
+- ✅ Message handling
+- ✅ Analytics ready
+
+**Ready for Phase 3: Analytics & Exports!** 🚀
+
+---
+
+## 🔧 Remaining Setup
+
+1. **Buy WhatsApp Business API access**
+   - Register business account
+   - Get credentials
+
+2. **Configure webhook in Meta dashboard**
+   - Set webhook URL
+   - Set verify token
+   - Subscribe to messages
+
+3. **Update environment variables**
+   - Add all WhatsApp credentials
+   - Add Redis URL
+   - Add bot phone number
+
+4. **Deploy to production**
+   - Push to Vercel
+   - Update .env in production
+   - Test webhook connectivity
+
+5. **Monitor**
+   - Check webhook logs
+   - Monitor message queue
+   - Track response rates
+   - Monitor errors
+
+---
+
+## 📞 Next Steps
+
+To go live:
+1. Configure WhatsApp Business Account
+2. Get API credentials from Meta
+3. Update .env.local and production
+4. Deploy
+5. Send test messages
+6. Monitor in production
+
+Phase 3 (Analytics & Exports) will build on top of the response data now being collected! 🎉

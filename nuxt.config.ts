@@ -113,20 +113,26 @@ export default defineNuxtConfig({
 
   /* ============ BUILD CONFIG ============ */
   build: {
-    transpile: ['@supabase/supabase-js'],
+    transpile: ['@supabase/supabase-js', 'ioredis'],
   },
 
   /* ============ RUNTIME CONFIG ============ */
   runtimeConfig: {
-    /* Private keys (server-side only) */
+    /* ============ PRIVATE KEYS (Server-side only) ============ */
     supabaseSecretKey: process.env.SUPABASE_SECRET_KEY,
+    whatsappApiToken: process.env.WHATSAPP_API_TOKEN,
+    whatsappWebhookToken: process.env.WHATSAPP_WEBHOOK_TOKEN,
+    whatsappWebhookSecret: process.env.WHATSAPP_WEBHOOK_SECRET,
+    redisUrl: process.env.REDIS_URL,
 
-    /* Public keys (client-side accessible) */
+    /* ============ PUBLIC KEYS (Client-side accessible) ============ */
     public: {
       supabaseUrl: process.env.NUXT_PUBLIC_SUPABASE_URL,
       supabaseAnonKey: process.env.NUXT_PUBLIC_SUPABASE_ANON_KEY,
       apiBaseUrl: process.env.NUXT_PUBLIC_API_BASE_URL || 'http://localhost:3000',
       environment: process.env.NUXT_PUBLIC_ENVIRONMENT || 'development',
+      whatsappPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
+      whatsappBotPhoneNumber: process.env.WHATSAPP_BOT_PHONE_NUMBER,
     },
   },
 
@@ -175,6 +181,38 @@ export default defineNuxtConfig({
   devServer: {
     port: 3000,
     host: '0.0.0.0',
+  },
+
+  /* ============ NITRO CONFIG (Server/API) ============ */
+  nitro: {
+    /* ============ STORAGE FOR REDIS ============ */
+    storage: {
+      redis: {
+        driver: 'redis',
+        /* Use async implementation for better performance */
+        url: process.env.REDIS_URL || 'redis://localhost:6379',
+      },
+    },
+
+    /* ============ PRERENDER CONFIG ============ */
+    prerender: {
+      crawlLinks: false,
+      /* Don't prerender API routes */
+      ignore: ['/api'],
+    },
+
+    /* ============ ROUTES CONFIG ============ */
+    routes: {
+      /* Make webhook routes public (no auth required) */
+      '/api/webhook/**': { cache: false },
+    },
+
+    /* ============ SECURITY HEADERS ============ */
+    headers: {
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'X-XSS-Protection': '1; mode=block',
+    },
   },
 
   /* ============ FEATURE FLAGS ============ */
