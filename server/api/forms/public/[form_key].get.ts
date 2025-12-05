@@ -1,74 +1,73 @@
 // server/api/forms/public/[form_key].get.ts
+import { serverSupabaseClient } from '#supabase/server'
 
 export default defineEventHandler(async (event) => {
+  const supabase = await serverSupabaseClient(event)
+  const formKey = getRouterParam(event, 'form_key')
+
+  if (!formKey) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Form key is required',
+    })
+  }
+
   try {
-    const formKey = getRouterParam(event, 'form_key')
-    console.log('📝 API Called - Form Key:', formKey)
-
-    if (!formKey) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: 'Form key is required',
-      })
-    }
-
-    // Create Supabase client for public data
-    const config = useRuntimeConfig()
-    const { createClient } = await import('@supabase/supabase-js')
-    
-    const supabase = createClient(
-      config.public.supabase.url,
-      config.public.supabase.key
-    )
-
-    // Fetch form
+    // Get published form
     const { data: form, error: formError } = await supabase
       .from('forms')
-      .select('id, title, description, form_key, is_published')
+      .select('*')
       .eq('form_key', formKey)
       .eq('is_published', true)
       .single()
 
-    console.log('📋 Form Query Result:', { form, formError })
-
     if (formError || !form) {
       throw createError({
         statusCode: 404,
-        statusMessage: 'Form not found',
+        statusMessage: 'This form does not exist or is not published',
       })
     }
 
-    // Fetch latest version - don't use .single()
-    const { data: versions, error: versionError } = await supabase
-      .from('form_versions')
-      .select('flow_json')
+    // Get form fields
+    const { data: fields, error: fieldsError } = await supabase
+      .from('form_fields')
+      .select('*')
       .eq('form_id', form.id)
-      .order('version', { ascending: false })
-      .limit(1)
+      .order('order_idx', { ascending: true })
 
-    console.log('📌 Version Query Result:', { versions, versionError })
-
-    if (versionError || !versions || versions.length === 0) {
+    if (fieldsError) {
       throw createError({
-        statusCode: 404,
-        statusMessage: 'No published version found',
+        statusCode: 500,
+        statusMessage: 'Failed to load form fields',
       })
     }
 
-    const version = versions[0]
+    // Transform fields to match the public form component structure
+    const transformedFields = (fields || []).map((field: any) => ({
+      field_id: field.id,
+      prompt: field.label,
+      type: field.type,
+      options: field.meta?.options || [],
+      validations: {
+        required: field.is_required,
+        ...field.meta?.validations,
+      },
+      placeholder: field.placeholder,
+      description: field.meta?.description,
+    }))
 
     return {
       id: form.id,
       title: form.title,
-      description: form.description || '',
+      description: form.description,
       form_key: form.form_key,
-      fields: version.flow_json?.steps || [],
+      fields: transformedFields,
     }
   } catch (error: any) {
-    console.error('❌ API Error:', error)
+    console.error('Error loading form:', error)
     throw createError({
       statusCode: error.statusCode || 500,
-      statusMessage: error.statusMessage || 'Server error',
+      statusMessage: error.statusMessage || 'Failed to load form',
     })
   }
 })

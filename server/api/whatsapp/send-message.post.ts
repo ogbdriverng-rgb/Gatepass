@@ -1,101 +1,147 @@
 /**
- * Send Message API
- * Allows sending messages via WhatsApp API
- * Used for notifications, reminders, etc.
+ * Send Message API - Send WhatsApp messages
+ * Authenticated endpoint for sending WhatsApp notifications
  */
+
+import { sendText, sendButtons, sendList, logMessage } from '~/server/utils/whatsappClient'
 
 interface SendMessagePayload {
   to: string
-  type: 'text' | 'template' | 'interactive'
+  type: 'text' | 'buttons' | 'list'
   text?: string
-  template_name?: string
-  template_params?: Record<string, any>
+  title?: string
+  buttons?: Array<{ id: string; title: string }>
+  sections?: Array<{
+    title: string
+    rows: Array<{ id: string; title: string }>
+  }>
 }
 
 export default defineEventHandler(async (event) => {
-  // Verify authentication
-  const user = await requireAuth(event)
-
-  if (!user) {
-    throw createError({
-      statusCode: 401,
-      statusMessage: 'Unauthorized',
-    })
-  }
-
-  // Get request body
-  const body = await readBody(event) as SendMessagePayload
-
-  // Validate
-  if (!body.to || !body.type) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Missing required fields: to, type',
-    })
-  }
-
   try {
-    const whatsapp = useWhatsAppClient()
+    // Verify authentication
+    const user = await requireAuth(event)
 
-    let message: any = {
-      messaging_product: 'whatsapp',
-      to: body.to,
+    if (!user) {
+      throw createError({
+        statusCode: 401,
+        statusMessage: 'Unauthorized',
+      })
     }
 
-    if (body.type === 'text') {
-      message.type = 'text'
-      message.text = { body: body.text }
-    } else if (body.type === 'template') {
-      message.type = 'template'
-      message.template = {
-        name: body.template_name,
-        language: { code: 'en_US' },
-        components: [
-          {
-            type: 'body',
-            parameters:
-              body.template_params &&
-              Object.values(body.template_params).map(v => ({ type: 'text', text: String(v) })),
-          },
-        ],
-      }
+    const body = await readBody(event) as SendMessagePayload
+    const supabase = useSupabaseServer()
+
+    // Validate required fields
+    if (!body.to || !body.type) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Missing required fields: to, type',
+      })
     }
 
-    const result = await whatsapp.sendMessage(message)
+    // Validate phone number format
+    if (!/^\d+$/.test(body.to.replace(/\D/g, ''))) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Invalid phone number format',
+      })
+    }
 
-    // Log message
-    await logWhatsAppMessage({
-      direction: 'outbound',
+    let response: any
+
+    // Handle different message types
+    switch (body.type) {
+      case 'text':
+        if (!body.text || body.text.trim().length === 0) {
+          throw createError({
+            statusCode: 400,
+            statusMessage: 'Text content is required for text messages',
+          })
+        }
+        response = await sendText(body.to, body.text)
+        break
+
+      case 'buttons':
+        if (!body.title || !body.buttons || body.buttons.length === 0) {
+          throw createError({
+            statusCode: 400,
+            statusMessage: 'Title and at least one button are required',
+          })
+        }
+        if (body.buttons.length > 3) {
+          throw createError({
+            statusCode: 400,
+            statusMessage: 'Maximum 3 buttons allowed',
+          })
+        }
+        response = await sendButtons(body.to, body.title, body.buttons)
+        break
+
+      case 'list':
+        if (!body.title || !body.sections || body.sections.length === 0) {
+          throw createError({
+            statusCode: 400,
+            statusMessage: 'Title and at least one section are required',
+          })
+        }
+        response = await sendList(body.to, body.title, body.sections)
+        break
+
+      default:
+        throw createError({
+          statusCode: 400,
+          statusMessage: `Unknown message type: ${body.type}`,
+        })
+    }
+
+    // Log successful message
+    await logMessage(supabase, {
       phone: body.to,
+      direction: 'outbound',
       type: body.type,
-      message_id: result.messages?.[0]?.id,
+      message_id: response?.messages?.[0]?.id,
       status: 'sent',
+      content: body.text || body.title,
     })
+
+    console.log(`[Send Message API] Message sent to ${body.to}`)
 
     return {
       success: true,
-      message_id: result.messages?.[0]?.id,
+      message_id: response?.messages?.[0]?.id,
+      timestamp: new Date().toISOString(),
     }
   } catch (error) {
     console.error('[Send Message API] Error:', error)
 
-    await logWhatsAppMessage({
-      direction: 'outbound',
-      phone: body.to,
-      type: body.type,
-      status: 'failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
-    })
+    // If it's already a createError, throw it
+    if (error instanceof Error && 'statusCode' in error) {
+      throw error
+    }
+
+    // Log error message
+    const body = await readBody(event).catch(() => ({})) as SendMessagePayload
+    if (body.to) {
+      const supabase = useSupabaseServer()
+      await logMessage(supabase, {
+        phone: body.to,
+        direction: 'outbound',
+        type: body.type || 'unknown',
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      }).catch(err => console.error('[Send Message API] Logging error failed:', err))
+    }
 
     throw createError({
       statusCode: 500,
-      statusMessage: 'Failed to send message',
+      statusMessage: error instanceof Error ? error.message : 'Failed to send message',
     })
   }
 })
 
 /**
- * Require authentication
+ * Require authentication - Verify JWT token
  */
 async function requireAuth(event: any) {
   try {
@@ -110,64 +156,19 @@ async function requireAuth(event: any) {
 
     const { data, error } = await supabase.auth.getUser(token)
 
-    if (error || !data) {
+    if (error || !data?.user) {
       return null
     }
 
-    return data
+    return data.user
   } catch (error) {
+    console.error('[Auth] Error verifying token:', error)
     return null
   }
 }
 
 /**
- * Log WhatsApp message
- */
-async function logWhatsAppMessage(data: any) {
-  try {
-    const supabase = useSupabaseServer()
-
-    await supabase.from('whatsapp_messages').insert({
-      phone: data.phone,
-      direction: data.direction,
-      type: data.type,
-      message_id: data.message_id,
-      status: data.status,
-      content: data.message,
-      error_message: data.error,
-      timestamp: new Date().toISOString(),
-    })
-  } catch (error) {
-    console.error('[Log WhatsApp Message] Error:', error)
-  }
-}
-
-/**
- * WhatsApp Client
- */
-function useWhatsAppClient() {
-  const apiUrl = 'https://graph.instagram.com/v15.0'
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || ''
-  const accessToken = process.env.WHATSAPP_API_TOKEN || ''
-
-  return {
-    async sendMessage(message: any) {
-      const response = await $fetch(`${apiUrl}/${phoneNumberId}/messages`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: message,
-      })
-
-      return response
-    },
-  }
-}
-
-/**
- * Helper: Get Supabase server client
+ * Get Supabase server client
  */
 function useSupabaseServer() {
   const { createClient } = require('@supabase/supabase-js')

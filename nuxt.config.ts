@@ -131,8 +131,8 @@ export default defineNuxtConfig({
       supabaseAnonKey: process.env.NUXT_PUBLIC_SUPABASE_ANON_KEY,
       apiBaseUrl: process.env.NUXT_PUBLIC_API_BASE_URL || 'http://localhost:3000',
       environment: process.env.NUXT_PUBLIC_ENVIRONMENT || 'development',
-      whatsappPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
-      whatsappBotPhoneNumber: process.env.WHATSAPP_BOT_PHONE_NUMBER,
+      whatsappPhoneNumberId: process.env.NUXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID,
+      whatsappBotPhoneNumber: process.env.NUXT_PUBLIC_WHATSAPP_BOT_PHONE_NUMBER,
     },
   },
 

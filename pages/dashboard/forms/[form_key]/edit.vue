@@ -317,6 +317,8 @@ definePageMeta({
   layout: 'dashboard',
 })
 
+// pages/dashboard/forms/[form_key]/edit.vue - Script section fixes
+
 const route = useRoute()
 const router = useRouter()
 const supabase = useSupabaseClient()
@@ -524,17 +526,14 @@ const handleDropOnField = async (targetIndex: number) => {
   if (!currentForm.value) return
 
   try {
-    // Reorder fields locally first
     const draggedField = currentForm.value.fields[draggedIndex.value]
     currentForm.value.fields.splice(draggedIndex.value, 1)
     currentForm.value.fields.splice(targetIndex, 0, draggedField)
 
-    // Update order_idx immediately
     currentForm.value.fields.forEach((field, index) => {
       field.order_idx = index
     })
 
-    // Save each field's new order to database immediately
     for (let i = 0; i < currentForm.value.fields.length; i++) {
       const field = currentForm.value.fields[i]
       await updateField(field.id, { order_idx: i })
@@ -557,7 +556,6 @@ const handleDrop = (e: DragEvent) => {
 
 /* FIELD ACTIONS */
 const selectField = (fieldId: string) => {
-  // Only close if clicking the same field again, otherwise switch to new field
   if (editingFieldId.value === fieldId) {
     editingFieldId.value = null
   } else {
@@ -567,13 +565,11 @@ const selectField = (fieldId: string) => {
 
 const handleUpdateField = async (fieldId: string, updates: any) => {
   try {
-    // Update local state immediately for instant UI feedback
     const fieldIndex = currentForm.value?.fields.findIndex(f => f.id === fieldId)
     if (fieldIndex !== undefined && fieldIndex >= 0 && currentForm.value) {
       Object.assign(currentForm.value.fields[fieldIndex], updates)
     }
 
-    // Save to database
     const result = await updateField(fieldId, updates)
     if (!result.success) {
       showError(result.error || 'Failed to update field')
@@ -705,8 +701,18 @@ const handlePublish = async () => {
   try {
     const result = await publishForm(currentForm.value.id)
     if (result.success) {
-      formStore.updateFormInList(result.form as any)
+      // Update local state with published form
+      const publishedForm = result.form as GatpassForm
+      if (currentForm.value) {
+        currentForm.value.is_published = publishedForm.is_published
+        currentForm.value.status = publishedForm.status
+        currentForm.value.flow_json = publishedForm.flow_json
+        currentForm.value.flow_version = publishedForm.flow_version
+      }
+      formStore.updateFormInList(publishedForm)
       showSuccess('Form published successfully!')
+      // Reset preview modal state to allow it to open
+      showPreview.value = false
     } else {
       showError(result.error || 'Failed to publish form')
     }
@@ -725,11 +731,16 @@ const handleUnpublish = async () => {
   try {
     const result = await unpublishForm(currentForm.value.id)
     if (result.success) {
-      formStore.updateFormInList({
+      const unpublishedForm = {
         ...currentForm.value,
         is_published: false,
-        status: 'draft',
-      })
+        status: 'draft' as const,
+      }
+      formStore.updateFormInList(unpublishedForm as GatpassForm)
+      if (currentForm.value) {
+        currentForm.value.is_published = false
+        currentForm.value.status = 'draft'
+      }
       showSuccess('Form unpublished successfully!')
     } else {
       showError(result.error || 'Failed to unpublish form')
@@ -774,8 +785,9 @@ const handleDelete = async () => {
 }
 
 /* UTILS */
-const goBack = () => {
-  router.push('/dashboard/forms')
+const goBack = async () => {
+  // Use proper router navigation
+  await router.push('/dashboard/forms')
 }
 
 /* LIFECYCLE */

@@ -1,12 +1,12 @@
 <template>
-  <div>
+  <div class="h-full flex flex-col">
     <!-- Header -->
     <div class="p-6 border-b border-base flex-shrink-0">
       <h3 class="text-lg font-bold text-base">Settings</h3>
     </div>
 
-    <!-- Content -->
-    <div class="flex-1 overflow-y-auto p-6 space-y-6">
+    <!-- Content - Fixed scrolling -->
+    <div class="flex-1 overflow-y-auto p-6 space-y-6 min-h-0">
       <!-- STATUS BADGES -->
       <div class="p-4 bg-secondary/5 rounded-lg">
         <p class="text-xs font-semibold text-secondary mb-3 uppercase tracking-wide">Status</p>
@@ -77,8 +77,8 @@
             />
             <button
               @click="copyKey"
-              class="px-3 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg transition-colors flex-shrink-0"
-              title="Copy form key"
+              :class="['px-3 py-2 rounded-lg transition-colors flex-shrink-0', copiedKey ? 'bg-success/20 text-success' : 'bg-primary/10 hover:bg-primary/20 text-primary']"
+              :title="copiedKey ? 'Copied!' : 'Copy form key'"
             >
               <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
@@ -99,20 +99,78 @@
             />
             <button
               @click="copyUrl"
-              class="px-3 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg transition-colors flex-shrink-0"
-              title="Copy web URL"
+              :class="['px-3 py-2 rounded-lg transition-colors flex-shrink-0', copiedUrl ? 'bg-success/20 text-success' : 'bg-primary/10 hover:bg-primary/20 text-primary']"
+              :title="copiedUrl ? 'Copied!' : 'Copy web URL'"
             >
               <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
               </svg>
             </button>
           </div>
           <p class="text-xs text-secondary mt-1">Share this link publicly</p>
         </div>
+      </div>
 
-        <!-- WHATSAPP TRIGGER -->
+      <div class="h-px bg-base" />
+
+      <!-- WHATSAPP SECTION -->
+      <div v-if="form.is_published">
+        <div class="flex items-center gap-2 mb-4">
+          <svg class="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.67-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.076 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421-7.403h-.004a9.87 9.87 0 00-5.031 1.378c-3.055 2.364-3.905 6.75-1.896 10.154 1.592 2.619 4.747 4.118 7.876 4.118 2.305 0 4.47-.822 6.162-2.376.826-.713 1.529-1.596 2.07-2.61l-.002-.004A9.87 9.87 0 0012.05 2.05C6.476 2.052 2.05 6.476 2.05 12.05c0 2.305.822 4.47 2.376 6.162.713.826 1.596 1.529 2.61 2.07l.004.002c1.564.805 3.322 1.266 5.16 1.266 5.573 0 9.999-4.426 10-9.999 0-2.305-.822-4.47-2.376-6.162-.713-.826-1.596-1.529-2.61-2.07z"/>
+          </svg>
+          <h4 class="text-xs font-semibold text-base uppercase tracking-wide">WhatsApp Integration</h4>
+        </div>
+
+        <!-- WhatsApp Link -->
+        <div class="mb-4">
+          <label class="text-xs font-semibold text-secondary block mb-2">WhatsApp Link</label>
+          <div class="flex gap-2">
+            <input
+              :value="whatsappLink"
+              type="text"
+              readonly
+              class="flex-1 px-3 py-2 border-2 border-base rounded-lg bg-secondary/5 text-sm font-mono text-xs truncate"
+            />
+            <button
+              @click="copyWhatsAppLink"
+              :class="['px-3 py-2 rounded-lg transition-colors flex-shrink-0', copiedWhatsApp ? 'bg-success/20 text-success' : 'bg-green-600 hover:bg-green-700 text-white']"
+              :title="copiedWhatsApp ? 'Copied!' : 'Copy WhatsApp link'"
+            >
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+              </svg>
+            </button>
+          </div>
+          <p class="text-xs text-secondary mt-1">Users can click to start on WhatsApp</p>
+        </div>
+
+        <!-- QR Code -->
+        <div class="mb-4 p-3 bg-green-50 rounded-lg border border-green-200 text-center">
+          <p class="text-xs font-semibold text-secondary mb-3">QR Code</p>
+          <div v-if="qrCode" class="flex justify-center">
+            <img :src="qrCode" :alt="`QR Code for ${form.title}`" class="w-40 h-40" />
+          </div>
+          <div v-else class="w-40 h-40 mx-auto bg-gray-100 rounded flex items-center justify-center">
+            <p class="text-xs text-secondary">Generating...</p>
+          </div>
+          <p class="text-xs text-secondary mt-2">Scan to open form on WhatsApp</p>
+        </div>
+
+        <!-- Open WhatsApp Button -->
+        <button
+          @click="openWhatsApp"
+          class="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 mb-4"
+        >
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.67-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.076 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421-7.403h-.004a9.87 9.87 0 00-5.031 1.378c-3.055 2.364-3.905 6.75-1.896 10.154 1.592 2.619 4.747 4.118 7.876 4.118 2.305 0 4.47-.822 6.162-2.376.826-.713 1.529-1.596 2.07-2.61l-.002-.004A9.87 9.87 0 0012.05 2.05C6.476 2.052 2.05 6.476 2.05 12.05c0 2.305.822 4.47 2.376 6.162.713.826 1.596 1.529 2.61 2.07l.004.002c1.564.805 3.322 1.266 5.16 1.266 5.573 0 9.999-4.426 10-9.999 0-2.305-.822-4.47-2.376-6.162-.713-.826-1.596-1.529-2.61-2.07z"/>
+          </svg>
+          Open in WhatsApp
+        </button>
+
+        <!-- WhatsApp Trigger -->
         <div>
-          <label class="text-xs font-semibold text-secondary block mb-2">WhatsApp Trigger</label>
+          <label class="text-xs font-semibold text-secondary block mb-2">WhatsApp Trigger Command</label>
           <div class="flex gap-2">
             <input
               :value="`START:${form.form_key}`"
@@ -121,17 +179,25 @@
               class="flex-1 px-3 py-2 border-2 border-base rounded-lg bg-secondary/5 text-sm font-mono text-xs"
             />
             <button
-              @click="copyWhatsApp"
-              class="px-3 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg transition-colors flex-shrink-0"
-              title="Copy WhatsApp trigger"
+              @click="copyTrigger"
+              :class="['px-3 py-2 rounded-lg transition-colors flex-shrink-0', copiedTrigger ? 'bg-success/20 text-success' : 'bg-primary/10 hover:bg-primary/20 text-primary']"
+              :title="copiedTrigger ? 'Copied!' : 'Copy trigger'"
             >
               <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
               </svg>
             </button>
           </div>
-          <p class="text-xs text-secondary mt-1">WhatsApp users can type this to start</p>
+          <p class="text-xs text-secondary mt-1">Users type this command to start</p>
         </div>
+      </div>
+
+      <!-- Draft State Info -->
+      <div v-else class="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+        <p class="text-xs text-yellow-700 font-semibold mb-1">📋 Draft Form</p>
+        <p class="text-xs text-yellow-600">
+          Publish your form to generate WhatsApp link and QR code for sharing.
+        </p>
       </div>
 
       <div class="h-px bg-base" />
@@ -172,6 +238,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref, computed, onMounted, watch } from 'vue'
 import type { GatpassForm } from '~/composables/useForms'
 
 interface Props {
@@ -187,6 +254,19 @@ const emit = defineEmits<{
   delete: []
 }>()
 
+const copiedKey = ref(false)
+const copiedUrl = ref(false)
+const copiedWhatsApp = ref(false)
+const copiedTrigger = ref(false)
+const qrCode = ref<string>('')
+
+const whatsappLink = computed(() => {
+  // Default phone for WhatsApp bot
+  const botPhone = '2348140827580'
+  const cleanPhone = botPhone.replace(/\D/g, '')
+  return `https://wa.me/${cleanPhone}?text=START:${props.form.form_key}`
+})
+
 const handleUpdateConfig = (event: Event) => {
   const target = event.target as HTMLInputElement
   emit('update-config', {
@@ -201,15 +281,50 @@ const handleUpdateExpiry = (event: Event) => {
   emit('update-expiry', days)
 }
 
-const copyKey = () => {
-  navigator.clipboard.writeText(props.form.form_key)
+const copyWithFeedback = (text: string, feedbackRef: any) => {
+  navigator.clipboard.writeText(text)
+  feedbackRef.value = true
+  setTimeout(() => {
+    feedbackRef.value = false
+  }, 2000)
 }
 
-const copyUrl = () => {
-  navigator.clipboard.writeText(`${props.baseUrl}/f/${props.form.form_key}`)
+const copyKey = () => copyWithFeedback(props.form.form_key, copiedKey)
+const copyUrl = () => copyWithFeedback(`${props.baseUrl}/f/${props.form.form_key}`, copiedUrl)
+const copyWhatsAppLink = () => copyWithFeedback(whatsappLink.value, copiedWhatsApp)
+const copyTrigger = () => copyWithFeedback(`START:${props.form.form_key}`, copiedTrigger)
+
+const openWhatsApp = () => {
+  window.open(whatsappLink.value, '_blank')
 }
 
-const copyWhatsApp = () => {
-  navigator.clipboard.writeText(`START:${props.form.form_key}`)
+// Generate QR Code - Fixed to handle async properly
+const generateQRCode = async () => {
+  if (!props.form.is_published) {
+    qrCode.value = ''
+    return
+  }
+
+  try {
+    // Use a CDN-based QR code generator instead
+    const encodedUrl = encodeURIComponent(whatsappLink.value)
+    qrCode.value = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodedUrl}`
+  } catch (error) {
+    console.error('Error generating QR code:', error)
+    qrCode.value = ''
+  }
 }
+
+// Watch for form publish status changes
+watch(
+  () => props.form.is_published,
+  () => {
+    generateQRCode()
+  }
+)
+
+// Initial generation on mount
+onMounted(() => {
+  generateQRCode()
+})
 </script>

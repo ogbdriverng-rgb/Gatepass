@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue'
+import { compileFormFlow, updateFormFlow } from '~/server/utils/formCompiler'
 
 export interface FormField {
   id: string
@@ -186,6 +187,7 @@ export const useForms = () => {
       isLoading.value = false
     }
   }
+
   /* ============ UPDATE FORM ============ */
   const updateForm = async (formId: string, updates: Partial<GatpassForm>) => {
     isLoading.value = true
@@ -251,58 +253,67 @@ export const useForms = () => {
     }
   }
 
-  /* ============ PUBLISH FORM ============ */
-  const publishForm = async (formId: string) => {
-    isLoading.value = true
-    error.value = null
+  /* ============ PUBLISH FORM - UPDATED WITH FLOW COMPILATION ============ */
+const publishForm = async (formId: string) => {
+  isLoading.value = true
+  error.value = null
 
-    try {
-      // Validate form has at least one field
-      if (!currentForm.value?.fields || currentForm.value.fields.length === 0) {
-        error.value = 'Form must have at least one field'
-        return { success: false, error: error.value }
-      }
-
-      // Compile flow JSON
-      const flowJson = compileFlow(currentForm.value)
-
-      const { data, error: publishError } = await supabase
-        .from('forms')
-        .update({
-          is_published: true,
-          status: 'published',
-          flow_json: flowJson,
-          flow_version: (currentForm.value.flow_version || 0) + 1,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', formId)
-        .select()
-        .single()
-
-      if (publishError) throw new Error(publishError.message)
-
-      // Update local state
-      const index = forms.value.findIndex(f => f.id === formId)
-      if (index !== -1) {
-        forms.value[index] = data as GatpassForm
-      }
-
-      if (currentForm.value) {
-        currentForm.value = {
-          ...currentForm.value,
-          ...(data as GatpassForm),
-        }
-      }
-
-      return { success: true, form: data }
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to publish form'
+  try {
+    if (!currentForm.value?.fields || currentForm.value.fields.length === 0) {
+      error.value = 'Form must have at least one field'
       return { success: false, error: error.value }
-    } finally {
-      isLoading.value = false
     }
-  }
 
+    // Compile flow JSON using Phase 2 compiler
+    const flowJson = compileFormFlow(currentForm.value, currentForm.value.fields)
+
+    // Get current form to check existing version
+    const { data: existingForm } = await supabase
+      .from('forms')
+      .select('flow_version')
+      .eq('id', formId)
+      .single()
+
+    // Increment version if already published, otherwise start at 1
+    const newVersion = existingForm?.flow_version ? existingForm.flow_version + 1 : 1
+
+    const { data, error: publishError } = await supabase
+      .from('forms')
+      .update({
+        is_published: true,
+        status: 'published',
+        flow_json: flowJson,
+        flow_version: newVersion,
+        published_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', formId)
+      .select()
+      .single()
+
+    if (publishError) throw new Error(publishError.message)
+
+    // Update local state
+    const index = forms.value.findIndex(f => f.id === formId)
+    if (index !== -1) {
+      forms.value[index] = data as GatpassForm
+    }
+
+    if (currentForm.value) {
+      currentForm.value = {
+        ...currentForm.value,
+        ...(data as GatpassForm),
+      }
+    }
+
+    return { success: true, form: data }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to publish form'
+    return { success: false, error: error.value }
+  } finally {
+    isLoading.value = false
+  }
+}
   /* ============ UNPUBLISH FORM ============ */
   const unpublishForm = async (formId: string) => {
     isLoading.value = true
@@ -355,7 +366,6 @@ export const useForms = () => {
         .insert({
           form_id: formId,
           ...field,
-          id: undefined, // Let DB generate ID
         })
         .select()
         .single()
@@ -364,6 +374,12 @@ export const useForms = () => {
 
       if (currentForm.value?.id === formId) {
         currentForm.value.fields.push(data as FormField)
+
+        // Recompile if published
+        if (currentForm.value.is_published) {
+          const flowJson = compileFormFlow(currentForm.value, currentForm.value.fields)
+          await updateFormFlow(supabase, formId, flowJson)
+        }
       }
 
       return { success: true, field: data }
@@ -375,7 +391,7 @@ export const useForms = () => {
     }
   }
 
-  /* ============ UPDATE FIELD ============ */
+  /* ============ UPDATE FIELD - UPDATED TO RECOMPILE IF PUBLISHED ============ */
   const updateField = async (fieldId: string, updates: Partial<FormField>) => {
     isLoading.value = true
     error.value = null
@@ -383,7 +399,10 @@ export const useForms = () => {
     try {
       const { data, error: fieldError } = await supabase
         .from('form_fields')
-        .update(updates)
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', fieldId)
         .select()
         .single()
@@ -394,6 +413,12 @@ export const useForms = () => {
         const fieldIndex = currentForm.value.fields.findIndex(f => f.id === fieldId)
         if (fieldIndex !== -1) {
           currentForm.value.fields[fieldIndex] = data as FormField
+        }
+
+        // Recompile if published
+        if (currentForm.value.is_published) {
+          const flowJson = compileFormFlow(currentForm.value, currentForm.value.fields)
+          await updateFormFlow(supabase, currentForm.value.id, flowJson)
         }
       }
 
@@ -406,7 +431,7 @@ export const useForms = () => {
     }
   }
 
-  /* ============ DELETE FIELD ============ */
+  /* ============ DELETE FIELD - UPDATED TO RECOMPILE IF PUBLISHED ============ */
   const deleteField = async (fieldId: string) => {
     isLoading.value = true
     error.value = null
@@ -421,6 +446,12 @@ export const useForms = () => {
 
       if (currentForm.value) {
         currentForm.value.fields = currentForm.value.fields.filter(f => f.id !== fieldId)
+
+        // Recompile if published
+        if (currentForm.value.is_published) {
+          const flowJson = compileFormFlow(currentForm.value, currentForm.value.fields)
+          await updateFormFlow(supabase, currentForm.value.id, flowJson)
+        }
       }
 
       return { success: true }
@@ -432,23 +463,18 @@ export const useForms = () => {
     }
   }
 
-  /* ============ REORDER FIELDS ============ */
+  /* ============ REORDER FIELDS - UPDATED TO RECOMPILE IF PUBLISHED ============ */
   const reorderFields = async (formId: string, fieldIds: string[]) => {
     isLoading.value = true
     error.value = null
 
     try {
       // Update order_idx for each field
-      const updates = fieldIds.map((fieldId, index) => ({
-        id: fieldId,
-        order_idx: index,
-      }))
-
-      for (const update of updates) {
+      for (let i = 0; i < fieldIds.length; i++) {
         const { error: reorderError } = await supabase
           .from('form_fields')
-          .update({ order_idx: update.order_idx })
-          .eq('id', update.id)
+          .update({ order_idx: i, updated_at: new Date().toISOString() })
+          .eq('id', fieldIds[i])
 
         if (reorderError) throw new Error(reorderError.message)
       }
@@ -456,6 +482,12 @@ export const useForms = () => {
       // Refresh fields
       if (currentForm.value?.id === formId) {
         currentForm.value.fields.sort((a, b) => a.order_idx - b.order_idx)
+
+        // Recompile if published
+        if (currentForm.value.is_published) {
+          const flowJson = compileFormFlow(currentForm.value, currentForm.value.fields)
+          await updateFormFlow(supabase, formId, flowJson)
+        }
       }
 
       return { success: true }
@@ -475,39 +507,6 @@ export const useForms = () => {
       result += chars.charAt(Math.floor(Math.random() * chars.length))
     }
     return result
-  }
-
-  const compileFlow = (form: FormWithFields): Record<string, any> => {
-    const steps = form.fields.map((field, index) => {
-      const baseStep = {
-        step_id: `s${index + 1}`,
-        field_id: field.id,
-        type: field.type,
-        prompt: field.label,
-        validations: field.meta.validations || {},
-        next: index === form.fields.length - 1 ? null : `s${index + 2}`,
-      }
-
-      // Add options for select/multiselect
-      if (['select', 'multiselect'].includes(field.type)) {
-        ;(baseStep as any).options = field.meta.options || []
-      }
-
-      return baseStep
-    })
-
-    return {
-      form_key: form.form_key,
-      title: form.title,
-      steps,
-      settings: {
-        allow_edit: form.config.allow_edit,
-        edit_window_days: form.config.expiry_days,
-        alias: form.public_alias,
-        web_url: `${window.location.origin}/f/${form.form_key}`,
-        whatsapp_trigger: `START:${form.form_key}`,
-      },
-    }
   }
 
   return {

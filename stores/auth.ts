@@ -67,12 +67,12 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /* ============ FETCH PROFILE ============ */
-  const fetchProfile = async () => {
+  const fetchProfile = async (supabaseClient?: any) => {
     if (!user.value) return
 
     try {
       isLoading.value = true
-      const supabase = useSupabaseClient()
+      const supabase = supabaseClient || useSupabaseClient()
       
       const { data, error: fetchError } = await supabase
         .from('users')
@@ -199,13 +199,13 @@ export const useAuthStore = defineStore('auth', () => {
       profile.value = profileData as UserProfile
 
       const { error: updateError } = await supabase
-  .from('users')
-  .update({ last_login: new Date().toISOString() })
-  .eq('id', data.user.id)
+        .from('users')
+        .update({ last_login: new Date().toISOString() })
+        .eq('id', data.user.id)
 
-if (updateError) {
-  console.error('Last login update error:', updateError)
-}
+      if (updateError) {
+        console.error('Last login update error:', updateError)
+      }
 
       if (process.client) {
         await router.push('/dashboard')
@@ -465,36 +465,38 @@ if (updateError) {
 
     try {
       isLoading.value = true
-      const supabase = useSupabaseClient()
+      
+      // Only call useSupabaseClient in browser context
+      if (!process.server) {
+        const supabase = useSupabaseClient()
 
-      const { data, error: sessionError } = await supabase.auth.getSession()
+        const { data, error: sessionError } = await supabase.auth.getSession()
 
-      if (sessionError) throw new Error(sessionError.message)
+        if (sessionError) throw new Error(sessionError.message)
 
-      const session = data.session
+        const session = data.session
 
-      if (session?.user) {
-        user.value = session.user
-        await fetchProfile()
-      }
+        if (session?.user) {
+          user.value = session.user
+          await fetchProfile(supabase)
+        }
 
-      isInitialized.value = true
-
-      if (process.client) {
+        // Setup auth state listener
         supabase.auth.onAuthStateChange(async (event, newSession) => {
           if (event === 'SIGNED_IN' && newSession?.user) {
             user.value = newSession.user
-            await fetchProfile()
+            await fetchProfile(supabase)
           } else if (event === 'SIGNED_OUT') {
             user.value = null
             profile.value = null
           } else if (event === 'USER_UPDATED' && newSession?.user) {
             user.value = newSession.user
-            await fetchProfile()
+            await fetchProfile(supabase)
           }
         })
       }
 
+      isInitialized.value = true
       return { success: true }
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Initialization failed'

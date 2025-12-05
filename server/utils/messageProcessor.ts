@@ -1,9 +1,36 @@
 /**
- * Message Processor - Business Logic for Handling WhatsApp Messages
- * This processes messages from the webhook queue
+ * Message Processor - Updated for Phase 7
+ * Adds comprehensive error handling and logging
  */
 
 import { createClient } from '@supabase/supabase-js'
+import {
+  getOrCreateSession,
+  initializeSession,
+  getCurrentField,
+  setCurrentStep,
+  getFormFields,
+  getNextField,
+  getSessionByPhone,
+} from './sessionManager'
+import { validateFieldValue } from './validation'
+import {
+  handleMessageError,
+  handleValidationError,
+  handleSessionError,
+  handleWhatsAppError,
+} from './errorHandler'
+import { logMessageFlow, logSessionEvent, logFormCompletion } from './responseLogger'
+
+/**
+ * Helper: Create Supabase client
+ */
+function createSupabaseClient() {
+  return createClient(
+    process.env.SUPABASE_URL || '',
+    process.env.SUPABASE_SERVICE_KEY || ''
+  )
+}
 
 interface ProcessingMessage {
   message_id: string
@@ -17,244 +44,289 @@ interface ProcessingMessage {
   contact_name?: string
 }
 
-export class MessageProcessor {
-  private supabase: any
-  private whatsappClient: any
+/**
+ * Process a single message
+ */
+export async function processMessage(message: ProcessingMessage) {
+  console.log(`[MessageProcessor] Processing message ${message.message_id} from ${message.from}`)
 
-  constructor() {
-    this.supabase = createClient(
-      process.env.SUPABASE_URL || '',
-      process.env.SUPABASE_SERVICE_KEY || ''
-    )
-    this.whatsappClient = new WhatsAppClient()
-  }
-
-  /**
-   * Process a single message
-   */
-  async processMessage(message: ProcessingMessage) {
-    console.log(`[MessageProcessor] Processing message from ${message.from}`)
-
-    try {
-      // Step 1: Check if message starts a form (START:form_key)
-      if (message.text.startsWith('START:')) {
-        return await this.handleFormStart(message)
-      }
-
-      // Step 2: Check if user has active session
-      const session = await this.findActiveSession(message.from)
-
-      if (!session) {
-        // No active session, ask user to start a form
-        await this.whatsappClient.sendMessage(message.from, {
-          type: 'text',
-          body: 'Please use the link provided to start a form.',
-        })
-        return
-      }
-
-      // Step 3: Handle message based on form flow
-      return await this.handleFormResponse(session, message)
-    } catch (error) {
-      console.error(`[MessageProcessor] Error processing message:`, error)
-      throw error
+  try {
+    if (message.text.startsWith('START:')) {
+      return await handleFormStart(message)
     }
-  }
 
-  /**
-   * Handle form start command
-   */
-  private async handleFormStart(message: ProcessingMessage) {
-    try {
-      // Extract form key from START:abc123
-      const formKey = message.text.split(':')[1]
+    const { success, session } = await getSessionByPhone(message.from)
 
-      if (!formKey) {
-        throw new Error('Invalid form key')
-      }
-
-      // Get form details
-      const { data: form, error: formError } = await this.supabase
-        .from('forms')
-        .select('*')
-        .eq('form_key', formKey)
-        .eq('is_published', true)
-        .single()
-
-      if (formError) {
-        throw new Error('Form not found')
-      }
-
-      // Check for existing session
-      const { data: existingSession } = await this.supabase
-        .from('form_responses')
-        .select('*')
-        .eq('form_id', form.id)
-        .eq('respondent_phone', message.from)
-        .eq('status', 'in_progress')
-        .limit(1)
-        .single()
-
-      let responseId: string
-
-      if (existingSession) {
-        // Resume existing session
-        responseId = existingSession.id
-        console.log(`[MessageProcessor] Resuming session ${responseId}`)
-      } else {
-        // Create new session
-        const { data: newResponse, error: createError } = await this.supabase
-          .from('form_responses')
-          .insert({
-            form_id: form.id,
-            respondent_phone: message.from,
-            respondent_name: message.contact_name,
-            status: 'in_progress',
-            source: 'whatsapp',
-            version: form.flow_version || 1,
-            session_data: {},
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            last_activity_at: new Date().toISOString(),
-          })
-          .select()
-          .single()
-
-        if (createError) {
-          throw new Error(`Failed to create response: ${createError.message}`)
-        }
-
-        responseId = newResponse.id
-        console.log(`[MessageProcessor] Created new session ${responseId}`)
-      }
-
-      // Get first field from flow
-      const { data: fields } = await this.supabase
-        .from('form_fields')
-        .select('*')
-        .eq('form_id', form.id)
-        .order('order_idx', { ascending: true })
-        .limit(1)
-
-      const firstField = fields?.[0]
-
-      if (!firstField) {
-        throw new Error('Form has no fields')
-      }
-
-      // Send first question
-      await this.sendFieldPrompt(message.from, firstField, 1, fields.length)
-
-      return { success: true, responseId }
-    } catch (error) {
-      console.error('[MessageProcessor] Error starting form:', error)
-      await this.whatsappClient.sendMessage(message.from, {
+    if (!success || !session) {
+      await sendWhatsAppMessage(message.from, {
         type: 'text',
-        body: 'Sorry, there was an error starting the form. Please try again.',
+        body: 'Please use the link provided to start a form.',
       })
-      throw error
+      return { success: false, error: 'No active session' }
     }
+
+    return await handleFormResponse(session, message)
+  } catch (error) {
+    const { shouldRetry, message: errorMsg } = await handleMessageError({
+      phone: message.from,
+      message_id: message.message_id,
+      error: error as Error,
+      context: 'process_message',
+      attempt: 1,
+      maxAttempts: 3,
+    })
+
+    throw error
   }
+}
 
-  /**
-   * Handle response to form field
-   */
-  private async handleFormResponse(session: any, message: ProcessingMessage) {
-    try {
-      // Get current field from flow
-      const { data: response } = await this.supabase
-        .from('form_responses')
-        .select('*')
-        .eq('id', session.id)
-        .single()
+/**
+ * Handle form start command (START:form_key)
+ */
+async function handleFormStart(message: ProcessingMessage) {
+  try {
+    const supabase = createSupabaseClient()
+    const formKey = message.text.split(':')[1]
 
-      const { data: fields } = await this.supabase
-        .from('form_fields')
-        .select('*')
-        .eq('form_id', response.form_id)
-        .order('order_idx', { ascending: true })
+    if (!formKey) {
+      throw new Error('Invalid form key')
+    }
 
-      // Find current field index
-      const currentFieldIndex = fields.findIndex(f => f.id === response.current_step)
-      const currentField = fields[currentFieldIndex]
+    const { data: form, error: formError } = await supabase
+      .from('forms')
+      .select('*')
+      .eq('form_key', formKey)
+      .eq('is_published', true)
+      .single()
 
-      if (!currentField) {
-        throw new Error('Field not found')
-      }
+    if (formError || !form) {
+      await sendWhatsAppMessage(message.from, {
+        type: 'text',
+        body: 'Form not found or not published.',
+      })
+      return { success: false, error: 'Form not found' }
+    }
 
-      // Validate response value
-      const validation = await this.validateResponse(
-        message,
-        currentField,
-        response.respondent_phone
-      )
+    // Get or create session
+    const { success: sessionSuccess, session, isNew } = await getOrCreateSession(
+      form.id,
+      message.from,
+      message.contact_name
+    )
 
-      if (!validation.valid) {
-        // Send error message and re-prompt
-        await this.whatsappClient.sendMessage(message.from, {
-          type: 'text',
-          body: validation.error || 'Invalid response. Please try again.',
-        })
-        return
-      }
+    if (!sessionSuccess || !session) {
+      throw new Error('Failed to create session')
+    }
 
-      // Save response value
-      await this.supabase.from('form_response_values').upsert({
+    // Log session creation
+    await logSessionEvent({
+      response_id: session.id,
+      event_type: isNew ? 'created' : 'resumed',
+      phone: message.from,
+      form_id: form.id,
+    })
+
+    // Initialize session with first field
+    const { success: initSuccess, field: firstField } = await initializeSession(
+      session.id,
+      form.id
+    )
+
+    if (!initSuccess || !firstField) {
+      throw new Error('Form has no fields')
+    }
+
+    // Get all fields
+    const { success: fieldsSuccess, fields: allFields } = await getFormFields(form.id)
+
+    if (!fieldsSuccess || !allFields) {
+      throw new Error('Failed to fetch form fields')
+    }
+
+    // Send first question
+    await sendFieldPrompt(message.from, firstField, 1, allFields.length)
+
+    // Log message sent
+    await logMessageFlow({
+      response_id: session.id,
+      field_id: firstField.id,
+      message_type: 'question_sent',
+      content: firstField.label,
+    })
+
+    return { success: true, responseId: session.id, isNewSession: isNew }
+  } catch (error) {
+    console.error('[MessageProcessor] Error starting form:', error)
+
+    const { userMessage, logMessage: logMsg } = await handleSessionError({
+      phone: message.from,
+      error: error as Error,
+      context: 'form_start',
+    })
+
+    await sendWhatsAppMessage(message.from, {
+      type: 'text',
+      body: userMessage,
+    })
+
+    throw error
+  }
+}
+
+/**
+ * Handle response to form field
+ */
+async function handleFormResponse(session: any, message: ProcessingMessage) {
+  try {
+    // Get current field
+    const { success: currentSuccess, field: currentField, formId } = await getCurrentField(
+      session.id
+    )
+
+    if (!currentSuccess || !currentField) {
+      throw new Error('Could not get current field')
+    }
+
+    // Get all fields
+    const { success: fieldsSuccess, fields: allFields } = await getFormFields(formId)
+
+    if (!fieldsSuccess || !allFields) {
+      throw new Error('Failed to fetch form fields')
+    }
+
+    // Validate response with field-specific validation
+    const validation = validateFieldValue(message.text, currentField.type, currentField)
+
+    if (!validation.valid) {
+      // Log validation error
+      await handleValidationError({
         response_id: session.id,
         field_id: currentField.id,
-        value: validation.value,
-        created_at: new Date().toISOString(),
+        phone: message.from,
+        fieldLabel: currentField.label,
+        fieldType: currentField.type,
+        value: message.text,
+        error: new Error(validation.error),
       })
 
-      // Check if more fields
-      const nextFieldIndex = currentFieldIndex + 1
+      await logMessageFlow({
+        response_id: session.id,
+        field_id: currentField.id,
+        message_type: 'validation_error',
+        error: validation.error,
+      })
 
-      if (nextFieldIndex >= fields.length) {
-        // Form complete
-        await this.completeForm(session.id, fields)
-        await this.whatsappClient.sendMessage(message.from, {
-          type: 'text',
-          body: '✅ Thank you! Your response has been submitted.',
-        })
-        return { success: true, status: 'completed' }
-      }
-
-      // Send next question
-      const nextField = fields[nextFieldIndex]
-      await this.updateCurrentStep(session.id, nextField.id)
-      await this.sendFieldPrompt(
-        message.from,
-        nextField,
-        nextFieldIndex + 1,
-        fields.length
-      )
-
-      return { success: true, status: 'in_progress' }
-    } catch (error) {
-      console.error('[MessageProcessor] Error handling response:', error)
-      await this.whatsappClient.sendMessage(message.from, {
+      await sendWhatsAppMessage(message.from, {
         type: 'text',
-        body: 'Sorry, there was an error processing your response.',
+        body: validation.error || 'Invalid response. Please try again.',
       })
-      throw error
+
+      return { success: false, error: 'Validation failed' }
     }
+
+    const supabase = createSupabaseClient()
+
+    // Save response value
+    const { error: saveError } = await supabase.from('form_response_values').upsert({
+      response_id: session.id,
+      field_id: currentField.id,
+      value: validation.value,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+
+    if (saveError) {
+      throw new Error(`Failed to save response: ${saveError.message}`)
+    }
+
+    // Log response received
+    await logMessageFlow({
+      response_id: session.id,
+      field_id: currentField.id,
+      message_type: 'response_received',
+      content: validation.value,
+    })
+
+    // Update session activity
+    await supabase
+      .from('form_responses')
+      .update({
+        last_activity_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', session.id)
+
+    // Get next field
+    const { success: nextSuccess, field: nextField, isComplete } = await getNextField(
+      session.id,
+      allFields
+    )
+
+    if (!nextSuccess) {
+      throw new Error('Failed to get next field')
+    }
+
+    if (isComplete) {
+      // Form is complete
+      await completeFormSubmission(session.id, session.created_at, formId, allFields.length)
+      await sendWhatsAppMessage(message.from, {
+        type: 'text',
+        body: '✅ Thank you! Your response has been submitted.',
+      })
+      return { success: true, status: 'completed' }
+    }
+
+    // Find current field index for progress
+    const currentIndex = allFields.findIndex(f => f.id === currentField.id)
+    const nextIndex = currentIndex + 1
+
+    // Set next field as current step
+    await setCurrentStep(session.id, nextField.id)
+
+    // Send next question
+    await sendFieldPrompt(message.from, nextField, nextIndex + 1, allFields.length)
+
+    // Log next question sent
+    await logMessageFlow({
+      response_id: session.id,
+      field_id: nextField.id,
+      message_type: 'question_sent',
+      content: nextField.label,
+    })
+
+    return { success: true, status: 'in_progress' }
+  } catch (error) {
+    console.error('[MessageProcessor] Error handling response:', error)
+
+    const { userMessage } = await handleSessionError({
+      phone: message.from,
+      error: error as Error,
+      context: 'form_response',
+    })
+
+    await sendWhatsAppMessage(message.from, {
+      type: 'text',
+      body: userMessage,
+    })
+
+    throw error
   }
+}
 
-  /**
-   * Send field prompt message
-   */
-  private async sendFieldPrompt(
-    phone: string,
-    field: any,
-    questionNumber: number,
-    totalQuestions: number
-  ) {
-    const progress = `(${questionNumber}/${totalQuestions})`
+/**
+ * Send field prompt message
+ */
+async function sendFieldPrompt(
+  phone: string,
+  field: any,
+  questionNumber: number,
+  totalQuestions: number
+) {
+  const progress = `(${questionNumber}/${totalQuestions})`
+  const header = `${field.label} ${progress}`
 
-    const header = `${field.label} ${progress}`
-
-    if (field.type === 'select' && field.meta.options?.length) {
-      // Send as buttons (max 3)
+  try {
+    if (field.type === 'select' && field.meta?.options?.length) {
       const buttons = field.meta.options.slice(0, 3).map((opt: any) => ({
         type: 'reply',
         reply: {
@@ -263,7 +335,7 @@ export class MessageProcessor {
         },
       }))
 
-      await this.whatsappClient.sendMessage(phone, {
+      await sendWhatsAppMessage(phone, {
         type: 'interactive',
         interactive: {
           type: 'button',
@@ -271,17 +343,13 @@ export class MessageProcessor {
           action: { buttons },
         },
       })
-    } else if (
-      field.type === 'multiselect' &&
-      field.meta.options?.length > 3
-    ) {
-      // Send as list
+    } else if (field.type === 'multiselect' && field.meta?.options?.length > 3) {
       const rows = field.meta.options.map((opt: any) => ({
         id: opt.id,
         title: opt.label,
       }))
 
-      await this.whatsappClient.sendMessage(phone, {
+      await sendWhatsAppMessage(phone, {
         type: 'interactive',
         interactive: {
           type: 'list',
@@ -298,59 +366,40 @@ export class MessageProcessor {
         },
       })
     } else {
-      // Send as text
-      await this.whatsappClient.sendMessage(phone, {
+      await sendWhatsAppMessage(phone, {
         type: 'text',
         body: header,
       })
     }
+  } catch (error) {
+    console.error('[MessageProcessor] Error sending field prompt:', error)
+    throw error
   }
+}
 
-  /**
-   * Validate response value
-   */
-  private async validateResponse(message: ProcessingMessage, field: any, phone: string) {
-    try {
-      const value = message.interactive_reply_id || message.text
+/**
+ * Complete form submission
+ */
+async function completeFormSubmission(
+  responseId: string,
+  createdAt: string,
+  formId: string,
+  fieldCount: number
+) {
+  const supabase = createSupabaseClient()
+  const completedAt = new Date().toISOString()
+  const completionTime = Math.floor(
+    (new Date(completedAt).getTime() - new Date(createdAt).getTime()) / 1000
+  )
 
-      // Add validation based on field type
-      if (field.meta.validations?.required && !value) {
-        return {
-          valid: false,
-          error: 'This field is required',
-        }
-      }
+  const { data: session, error: fetchError } = await supabase
+    .from('form_responses')
+    .select('respondent_phone')
+    .eq('id', responseId)
+    .single()
 
-      return {
-        valid: true,
-        value,
-      }
-    } catch (error) {
-      return {
-        valid: false,
-        error: 'Invalid response',
-      }
-    }
-  }
-
-  /**
-   * Complete form submission
-   */
-  private async completeForm(responseId: string, fields: any[]) {
-    const completedAt = new Date().toISOString()
-    const { data: response } = await this.supabase
-      .from('form_responses')
-      .select('created_at')
-      .eq('id', responseId)
-      .single()
-
-    const completionTime = Math.floor(
-      (new Date(completedAt).getTime() -
-        new Date(response.created_at).getTime()) /
-        1000
-    )
-
-    await this.supabase
+  if (!fetchError && session) {
+    const { error } = await supabase
       .from('form_responses')
       .update({
         status: 'completed',
@@ -359,78 +408,72 @@ export class MessageProcessor {
         updated_at: completedAt,
       })
       .eq('id', responseId)
-  }
 
-  /**
-   * Find active session for phone
-   */
-  private async findActiveSession(phone: string) {
-    const { data } = await this.supabase
-      .from('form_responses')
-      .select('*')
-      .eq('respondent_phone', phone)
-      .eq('status', 'in_progress')
-      .order('last_activity_at', { ascending: false })
-      .limit(1)
-      .single()
-
-    return data
-  }
-
-  /**
-   * Update current step
-   */
-  private async updateCurrentStep(responseId: string, fieldId: string) {
-    await this.supabase
-      .from('form_responses')
-      .update({
-        current_step: fieldId,
-        last_activity_at: new Date().toISOString(),
+    if (!error) {
+      // Log completion
+      await logFormCompletion({
+        response_id: responseId,
+        form_id: formId,
+        phone: session.respondent_phone,
+        completion_time_seconds: completionTime,
+        field_count: fieldCount,
+        total_fields: fieldCount,
       })
-      .eq('id', responseId)
+
+      // Log session event
+      await logSessionEvent({
+        response_id: responseId,
+        event_type: 'completed',
+        phone: session.respondent_phone,
+        form_id: formId,
+      })
+
+      console.log(`[MessageProcessor] Form ${responseId} completed in ${completionTime}s`)
+    }
   }
 }
 
 /**
- * WhatsApp Cloud API Client
+ * Send message via WhatsApp with error handling
  */
-class WhatsAppClient {
-  private apiUrl: string
-  private phoneNumberId: string
-  private accessToken: string
+export async function sendWhatsAppMessage(to: string, message: any, retries = 2) {
+  let lastError: any
 
-  constructor() {
-    this.apiUrl = 'https://graph.instagram.com/v15.0'
-    this.phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || ''
-    this.accessToken = process.env.WHATSAPP_API_TOKEN || ''
-  }
-
-  /**
-   * Send message via WhatsApp
-   */
-  async sendMessage(to: string, message: any) {
+  for (let i = 0; i <= retries; i++) {
     try {
-      const response = await $fetch(
-        `${this.apiUrl}/${this.phoneNumberId}/messages`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${this.accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: {
-            messaging_product: 'whatsapp',
-            to,
-            ...message,
-          },
-        }
-      )
+      const apiUrl = 'https://graph.instagram.com/v15.0'
+      const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || ''
+      const accessToken = process.env.WHATSAPP_API_TOKEN || ''
 
-      console.log(`[WhatsAppClient] Message sent to ${to}:`, response)
+      const response = await $fetch(`${apiUrl}/${phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: {
+          messaging_product: 'whatsapp',
+          to,
+          ...message,
+        },
+      })
+
+      console.log(`[WhatsAppClient] Message sent to ${to}`)
       return response
     } catch (error) {
-      console.error(`[WhatsAppClient] Error sending message:`, error)
-      throw error
+      lastError = error
+      const { message: errorMsg, shouldRetry } = handleWhatsAppError(error)
+
+      console.error(`[WhatsAppClient] Send attempt ${i + 1} failed: ${errorMsg}`)
+
+      if (i < retries && shouldRetry) {
+        const delay = Math.min(1000 * (i + 1), 5000)
+        await new Promise(resolve => setTimeout(resolve, delay))
+      } else if (!shouldRetry) {
+        break
+      }
     }
   }
+
+  throw lastError
 }
